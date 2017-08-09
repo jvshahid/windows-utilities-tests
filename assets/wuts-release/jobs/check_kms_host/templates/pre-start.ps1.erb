@@ -1,0 +1,33 @@
+﻿$ExpectedHost="<%= p("check_kms_host.host").to_s %>"
+$ExpectedPort="<%= p("check_kms_host.port").to_s %>"
+
+$KMSServicePath="HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SoftwareProtectionPlatform"
+
+$ActualHost="{0}" -f (Get-ItemProperty -Path $KMSServicePath).KeyManagementServiceName
+$ActualPort="{0}" -f (Get-ItemProperty -Path $KMSServicePath).KeyManagementServicePort
+
+$script:i = 0;
+While ($script:i -lt 30) {
+  $msg="Checking host and port; try {0}" -f $script:i
+  Write-Host msg
+
+  If (($ExpectedHost -Ne $ActualHost) -Or ($ExpectedPort -Ne $ActualPort)) {
+    $script:i++
+    Start-Sleep -s 10
+  } Else {
+    Break
+  }
+}
+
+If ($ExpectedHost -Ne $ActualHost) {
+  $msg="Error: Expected KMS Host to equal {0}; Got {1}" -f $ExpectedHost,$ActualHost
+  Write-Error $msg
+  Exit 1
+}
+If ($ExpectedPort -Ne $ActualPort) {
+  $msg="Error: Expected KMS Port to equal {0}; Got {1}" -f $ExpectedPort,$ActualPort
+  Write-Error $msg
+  Exit 1
+}
+
+Exit 0

@@ -1,0 +1,13 @@
+{
+  "bosh": {
+    "ca_cert": "<contents of your bosh director cert, with \n for newlines>",
+    "client": "<bosh client name>",
+    "client_secret": "<bosh client secret>",
+    "target": "<IP of your bosh director>"
+  },
+  "stemcell_path": "<absolute path to stemcell tgz>",
+  "az": "<area zone from bosh cloud config>",
+  "vm_type": "<vm_type from bosh cloud config>",
+  "vm_extensions": "<comma separated string of options, e.g. 50GB_ephemeral_disk>",
+  "network": "<network from bosh cloud config>"
+}
