@@ -55,7 +55,7 @@ instance_groups:
 - name: kms-host-enabled
   instances: 1
   stemcell: windows
-  lifecycle: service
+  lifecycle: errand
   azs: [{{.AZ}}]
   vm_type: {{.VmType}}
   vm_extensions: [{{.VmExtensions}}]
@@ -75,54 +75,54 @@ instance_groups:
         enabled: true
         host: test.test
         port: 1234
+- name: kms-host-not-enabled
+  instances: 1
+  stemcell: windows
+  lifecycle: errand
+  azs: [{{.AZ}}]
+  vm_type: {{.VmType}}
+  vm_extensions: [{{.VmExtensions}}]
+  networks:
+  - name: {{.Network}}
+  jobs:
+  - name: check_kms_host
+    release: {{.ReleaseName}}
+    properties:
+      check_kms_host:
+        host:
+        port:
+  - name: set_kms_host
+    release: windows-utilities
+    properties:
+      set_kms_host:
+        enabled: false
+        host: test.test
+        port: 1234
+- name: kms-host-enabled-with-default
+  instances: 1
+  stemcell: windows
+  lifecycle: errand
+  azs: [{{.AZ}}]
+  vm_type: {{.VmType}}
+  vm_extensions: [{{.VmExtensions}}]
+  networks:
+  - name: {{.Network}}
+  jobs:
+  - name: check_kms_host
+    release: {{.ReleaseName}}
+    properties:
+      check_kms_host:
+        host: test.test
+        port: 1688
+  - name: set_kms_host
+    release: windows-utilities
+    properties:
+      set_kms_host:
+        enabled: true
+        host: test.test
+        port:
 `
 
-// - name: kms-host-not-enabled
-//   instances: 1
-//   stemcell: windows
-//   lifecycle: service
-//   azs: [{{.AZ}}]
-//   vm_type: {{.VmType}}
-//   vm_extensions: [{{.VmExtensions}}]
-//   networks:
-//   - name: {{.Network}}
-//   jobs:
-//   - name: check_kms_host
-//     release: {{.ReleaseName}}
-//     properties:
-//       check_kms_host:
-//         host:
-//         port:
-//   - name: set_kms_host
-//     release: windows-utilities-release
-//     properties:
-//       set_kms_host:
-//         enabled: false
-//         host:
-//         port:
-// - name: kms-host-enabled-with-default
-//   instances: 1
-//   stemcell: windows
-//   lifecycle: service
-//   azs: [{{.AZ}}]
-//   vm_type: {{.VmType}}
-//   vm_extensions: [{{.VmExtensions}}]
-//   networks:
-//   - name: {{.Network}}
-//   jobs:
-//   - name: check_kms_host
-//     release: {{.ReleaseName}}
-//     properties:
-//       check_kms_host:
-//         host: test.test
-//         port: 1688
-//   - name: set_kms_host
-//     release: windows-utilities-release
-//     properties:
-//       set_kms_host:
-//         enabled: false
-//         host: test.test
-//         port:
 type ManifestProperties struct {
 	DeploymentName string
 	ReleaseName    string
@@ -347,8 +347,24 @@ var _ = Describe("Windows Utilities Release", func() {
 		Expect(err).To(Succeed())
 	})
 
-	It("Deploys with correct KMS Settings", func() {
+	It("Enables KMS with Host and custom Port", func() {
 		err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentName, manifestPath))
+		Expect(err).To(Succeed())
+		err = bosh.Run(fmt.Sprintf("-d %s run-errand kms-host-enabled", deploymentName))
+		Expect(err).To(Succeed())
+	})
+
+	It("Does not enable KMS", func() {
+		err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentName, manifestPath))
+		Expect(err).To(Succeed())
+		err = bosh.Run(fmt.Sprintf("-d %s run-errand kms-host-not-enabled", deploymentName))
+		Expect(err).To(Succeed())
+	})
+
+	It("Enables KMS with Host and default Port", func() {
+		err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentName, manifestPath))
+		Expect(err).To(Succeed())
+		err = bosh.Run(fmt.Sprintf("-d %s run-errand kms-host-enabled-with-default", deploymentName))
 		Expect(err).To(Succeed())
 	})
 
