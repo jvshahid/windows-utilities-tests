@@ -19,8 +19,14 @@ While ($script:i -lt 10) {
   }
 }
 
-# Check KMS settings in registry (GCP defaults to kms.windows.googlecloud.com if nothing is set)
-$DefaultKms=@("kms.windows.googlecloud.com", "169.254.169.250", "kms.core.windows.net") # TODO: add Vsphere
+# Check KMS settings in registry
+$DefaultKms=@(
+  "kms.windows.googlecloud.com", # GCP
+  "169.254.169.250", # Amazon
+  "169.254.169.251", # Amazon
+  "kms.core.windows.net" # Azure
+)
+
 If (($ExpectedHost -Eq "") -And ($DefaultKms.Contains($ActualHost))) {
   "Default KMS Host set by IaaS"
 } Else {
@@ -53,12 +59,12 @@ if ($ExpectedPort -Ne "") {
   }
 } Else {
   if (($UnexpectedRule = Get-NetFirewallRule | where { $_.DisplayName -match "Open inbound \d+ for KMS Server" }) -ne $null) {
-  $msg="Error: Unexpected firewall rule: {0}" -f $UnexpectedRule.DisplayName
+    $msg="Error: Unexpected firewall rule: {0}" -f $UnexpectedRule.DisplayName
     Write-Error $msg
     Exit 1
   }
   if (($UnexpectedRule = Get-NetFirewallRule | where { $_.DisplayName -match "Open outbound \d+ for KMS Server" }) -ne $null) {
-  $msg="Error: Unexpected firewall rule: {0}" -f $UnexpectedRule.DisplayName
+    $msg="Error: Unexpected firewall rule: {0}" -f $UnexpectedRule.DisplayName
     Write-Error $msg
     Exit 1
   }
