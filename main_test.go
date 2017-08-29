@@ -30,7 +30,7 @@ const BOSH_TIMEOUT = 45 * time.Minute
 const GoZipFile = "go1.7.1.windows-amd64.zip"
 const GolangURL = "https://storage.googleapis.com/golang/" + GoZipFile
 
-var manifestTemplate = `
+const sshTemplate = `
 ---
 name: {{.DeploymentName}}
 
@@ -42,7 +42,51 @@ releases:
 
 stemcells:
 - alias: windows
-  os: {{.StemcellOs}}
+  os: {{.StemcellOS}}
+  version: latest
+
+update:
+  canaries: 0
+  canary_watch_time: 60000
+  update_watch_time: 60000
+  max_in_flight: 2
+
+instance_groups:
+- name: check-ssh
+  instances: 1
+  stemcell: windows
+  lifecycle: service # run as service
+  azs: [{{.AZ}}]
+  vm_type: {{.VmType}}
+  vm_extensions: [{{.VmExtensions}}]
+  networks:
+  - name: {{.Network}}
+  jobs:
+  - name: enable_ssh
+    release: windows-utilities
+    properties:
+      enable_ssh:
+        enabled: {{.SSHEnabled}}
+  - name: check_ssh
+    release: {{.ReleaseName}}
+    properties:
+      check_ssh:
+        expected: {{.SSHEnabled}}
+`
+
+const manifestTemplate = `
+---
+name: {{.DeploymentName}}
+
+releases:
+- name: {{.ReleaseName}}
+  version: latest
+- name: windows-utilities
+  version: latest
+
+stemcells:
+- alias: windows
+  os: {{.StemcellOS}}
   version: latest
 
 update:
@@ -130,7 +174,7 @@ type ManifestProperties struct {
 	VmType         string
 	VmExtensions   string
 	Network        string
-	StemcellOs     string
+	StemcellOS     string
 }
 
 type Config struct {
@@ -140,9 +184,9 @@ type Config struct {
 		ClientSecret string `json:"client_secret"`
 		Target       string `json:"target"`
 	} `json:"bosh"`
-	Stemcellpath         string `json:"stemcell_path"`
-	Windowsutilitiespath string `json:"windows_utilities_path"`
-	StemcellOs           string `json:"stemcell_os"`
+	StemcellPath         string `json:"stemcell_path"`
+	WindowsUtilitiesPath string `json:"windows_utilities_path"`
+	StemcellOS           string `json:"stemcell_os"`
 	Az                   string `json:"az"`
 	VmType               string `json:"vm_type"`
 	VmExtensions         string `json:"vm_extensions"`
@@ -174,9 +218,36 @@ func (c *Config) generateManifest(deploymentName string) ([]byte, error) {
 		VmType:         c.VmType,
 		VmExtensions:   c.VmExtensions,
 		Network:        c.Network,
-		StemcellOs:     c.StemcellOs,
+		StemcellOS:     c.StemcellOS,
 	}
 	templ, err := template.New("").Parse(manifestTemplate)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	err = templ.Execute(&buf, manifestProperties)
+	return buf.Bytes(), err
+}
+
+type SSHManifestProperties struct {
+	ManifestProperties
+	SSHEnabled bool
+}
+
+func (c *Config) generateManifestSSH(deploymentName string, enabled bool) ([]byte, error) {
+	manifestProperties := SSHManifestProperties{
+		ManifestProperties: ManifestProperties{
+			DeploymentName: deploymentName,
+			ReleaseName:    "wuts-release",
+			AZ:             c.Az,
+			VmType:         c.VmType,
+			VmExtensions:   c.VmExtensions,
+			Network:        c.Network,
+			StemcellOS:     c.StemcellOS,
+		},
+		SSHEnabled: enabled,
+	}
+	templ, err := template.New("").Parse(sshTemplate)
 	if err != nil {
 		return nil, err
 	}
@@ -280,16 +351,20 @@ func downloadLogs(jobName string, index int) *gbytes.Buffer {
 }
 
 var (
-	bosh           *BoshCommand
-	deploymentName string
-	manifestPath   string
-	boshCertPath   string
+	bosh              *BoshCommand
+	deploymentName    string
+	deploymentNameSSH string
+	manifestPath      string
+	manifestPathSSH   string
+	boshCertPath      string
 )
 
 var _ = Describe("Windows Utilities Release", func() {
+	var config *Config
 
 	BeforeSuite(func() {
-		config, err := NewConfig()
+		var err error
+		config, err = NewConfig()
 		Expect(err).To(Succeed())
 
 		cert := config.Bosh.CaCert
@@ -308,12 +383,14 @@ var _ = Describe("Windows Utilities Release", func() {
 
 		bosh.Run("login")
 		deploymentName = fmt.Sprintf("windows-utilities-test-%d", time.Now().UTC().Unix())
+		deploymentNameSSH = fmt.Sprintf("windows-utilities-test-ssh-%d", time.Now().UTC().Unix())
 
 		pwd, err := os.Getwd()
 		Expect(err).To(Succeed())
 		Expect(os.Chdir(filepath.Join(pwd, "assets", "wuts-release"))).To(Succeed()) // push
 		defer os.Chdir(pwd)                                                          // pop
 
+		// Generate main manifest
 		manifest, err := config.generateManifest(deploymentName)
 		Expect(err).To(Succeed())
 		manifestFile, err := ioutil.TempFile("", "")
@@ -328,16 +405,20 @@ var _ = Describe("Windows Utilities Release", func() {
 		Expect(bosh.Run("upload-release")).To(Succeed())
 
 		// Upload latest windows-utilities release
-		matches, err := filepath.Glob(config.Windowsutilitiespath)
-		Expect(err).To(Succeed())
-		Expect(matches).To(HaveLen(1))
+		matches, err := filepath.Glob(config.WindowsUtilitiesPath)
+		Expect(err).To(Succeed(),
+			fmt.Sprintf("expected to find windows-utilities at: %s", config.WindowsUtilitiesPath))
+		Expect(matches).To(HaveLen(1),
+			fmt.Sprintf("expected to find windows-utilities at: %s", config.WindowsUtilitiesPath))
 
 		Expect(bosh.Run(fmt.Sprintf("upload-release %s", matches[0]))).To(Succeed())
 
 		// Upload latest stemcell
-		matches, err = filepath.Glob(config.Stemcellpath)
-		Expect(err).To(Succeed())
-		Expect(matches).To(HaveLen(1))
+		matches, err = filepath.Glob(config.StemcellPath)
+		Expect(err).To(Succeed(),
+			fmt.Sprintf("expected to find stemcell at: %s", config.StemcellPath))
+		Expect(matches).To(HaveLen(1),
+			fmt.Sprintf("expected to find stemcell at: %s", config.StemcellPath))
 
 		err = bosh.Run(fmt.Sprintf("upload-stemcell %s", matches[0]))
 		if err != nil {
@@ -368,15 +449,50 @@ var _ = Describe("Windows Utilities Release", func() {
 		Expect(err).To(Succeed())
 	})
 
+	FIt("Enables and then disables SSH", func() {
+		// Generate ssh manifest
+		{
+			manifest, err := config.generateManifestSSH(deploymentNameSSH, true)
+			Expect(err).To(Succeed())
+
+			manifestFile, err := ioutil.TempFile("", "")
+			Expect(err).To(Succeed())
+
+			_, err = manifestFile.Write(manifest)
+			Expect(err).To(Succeed())
+			manifestFile.Close()
+
+			manifestPathSSH, err = filepath.Abs(manifestFile.Name())
+			Expect(err).To(Succeed())
+		}
+
+		err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameSSH, manifestPathSSH))
+		Expect(err).To(Succeed())
+
+		// Regenerate the manifest
+		{
+			manifest, err := config.generateManifestSSH(deploymentNameSSH, false)
+			Expect(err).To(Succeed())
+
+			err = ioutil.WriteFile(manifestPathSSH, manifest, 0644)
+			Expect(err).To(Succeed())
+		}
+
+		err = bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameSSH, manifestPathSSH))
+		Expect(err).To(Succeed())
+	})
+
 	AfterSuite(func() {
 		bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentName))
 
-		bosh.Run("clean-up --all")
-		if bosh.CertPath != "" {
-			os.RemoveAll(bosh.CertPath)
-		}
-		if manifestPath != "" {
-			os.RemoveAll(manifestPath)
-		}
+		// WARN WARN WARN WARN
+		//
+		// bosh.Run("clean-up --all")
+		// if bosh.CertPath != "" {
+		// 	os.RemoveAll(bosh.CertPath)
+		// }
+		// if manifestPath != "" {
+		// 	os.RemoveAll(manifestPath)
+		// }
 	})
 })
