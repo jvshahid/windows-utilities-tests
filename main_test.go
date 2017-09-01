@@ -32,6 +32,45 @@ const BOSH_TIMEOUT = 45 * time.Minute
 const GoZipFile = "go1.7.1.windows-amd64.zip"
 const GolangURL = "https://storage.googleapis.com/golang/" + GoZipFile
 
+const enableSshTemplate = `
+---
+name: {{.DeploymentName}}
+
+releases:
+- name: {{.ReleaseName}}
+  version: latest
+- name: windows-utilities
+  version: latest
+
+stemcells:
+- alias: windows
+  os: {{.StemcellOS}}
+  version: latest
+
+update:
+  canaries: 0
+  canary_watch_time: 60000
+  update_watch_time: 60000
+  max_in_flight: 2
+
+instance_groups:
+- name: enable_ssh
+  instances: 1
+  stemcell: windows
+  lifecycle: service # run as service
+  azs: [{{.AZ}}]
+  vm_type: {{.VmType}}
+  vm_extensions: [{{.VmExtensions}}]
+  networks:
+  - name: {{.Network}}
+  jobs:
+  - name: enable_ssh
+    release: windows-utilities
+    properties:
+      enable_ssh:
+        enabled: true
+`
+
 const sshTemplate = `
 ---
 name: {{.DeploymentName}}
@@ -212,7 +251,7 @@ func NewConfig() (*Config, error) {
 	return &config, nil
 }
 
-func (c *Config) generateManifest(deploymentName string) ([]byte, error) {
+func (c *Config) generateManifest(deploymentName string, mTemplate string) ([]byte, error) {
 	manifestProperties := ManifestProperties{
 		DeploymentName: deploymentName,
 		ReleaseName:    "wuts-release",
@@ -222,7 +261,7 @@ func (c *Config) generateManifest(deploymentName string) ([]byte, error) {
 		Network:        c.Network,
 		StemcellOS:     c.StemcellOS,
 	}
-	templ, err := template.New("").Parse(manifestTemplate)
+	templ, err := template.New("").Parse(mTemplate)
 	if err != nil {
 		return nil, err
 	}
@@ -286,12 +325,17 @@ func (c *BoshCommand) args(command string) []string {
 }
 
 func (c *BoshCommand) Run(command string) error {
+	_, err := c.RunWithOutput(command)
+	return err
+}
+
+func (c *BoshCommand) RunWithOutput(command string) (string, error) {
 	cmd := exec.Command("bosh", c.args(command)...)
 	log.Printf("\nRUNNING %q\n", strings.Join(cmd.Args, " "))
 
 	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 	if err != nil {
-		return err
+		return "", err
 	}
 	session.Wait(c.Timeout)
 
@@ -302,10 +346,20 @@ func (c *BoshCommand) Run(command string) error {
 			stderr = session.Err.Contents()
 		}
 		stdout := session.Out.Contents()
-		return fmt.Errorf("Non-zero exit code for cmd %q: %d\nSTDERR:\n%s\nSTDOUT:%s\n",
+		return "", fmt.Errorf("Non-zero exit code for cmd %q: %d\nSTDERR:\n%s\nSTDOUT:%s\n",
 			strings.Join(cmd.Args, " "), exitCode, stderr, stdout)
 	}
-	return nil
+	stdout := session.Out.Contents()
+	return string(stdout), nil
+}
+
+func (c *BoshCommand) GetIp(deploymentName string) (string, error) {
+	vms, err := c.RunWithOutput(fmt.Sprintf("-d %v vms", deploymentName))
+	if err != nil {
+		return "", err
+	}
+	ip := strings.Split(vms, "\t")[3]
+	return ip, nil
 }
 
 func downloadGo() (string, error) {
@@ -353,12 +407,13 @@ func downloadLogs(jobName string, index int) *gbytes.Buffer {
 }
 
 var (
-	bosh              *BoshCommand
-	deploymentName    string
-	deploymentNameSSH string
-	manifestPath      string
-	manifestPathSSH   string
-	boshCertPath      string
+	bosh                         *BoshCommand
+	deploymentName               string
+	deploymentNameSSH            string
+	deploymentNameRandomPassword string
+	manifestPath                 string
+	manifestPathSSH              string
+	boshCertPath                 string
 )
 
 var _ = Describe("Windows Utilities Release", func() {
@@ -386,6 +441,7 @@ var _ = Describe("Windows Utilities Release", func() {
 		bosh.Run("login")
 		deploymentName = fmt.Sprintf("windows-utilities-test-%d", time.Now().UTC().Unix())
 		deploymentNameSSH = fmt.Sprintf("windows-utilities-test-ssh-%d", time.Now().UTC().Unix())
+		deploymentNameRandomPassword = fmt.Sprintf("windows-utilities-test-random-password-%d", time.Now().UTC().Unix())
 
 		pwd, err := os.Getwd()
 		Expect(err).To(Succeed())
@@ -393,7 +449,7 @@ var _ = Describe("Windows Utilities Release", func() {
 		defer os.Chdir(pwd)                                                          // pop
 
 		// Generate main manifest
-		manifest, err := config.generateManifest(deploymentName)
+		manifest, err := config.generateManifest(deploymentName, manifestTemplate)
 		Expect(err).To(Succeed())
 		manifestFile, err := ioutil.TempFile("", "")
 		Expect(err).To(Succeed())
@@ -485,6 +541,29 @@ var _ = Describe("Windows Utilities Release", func() {
 	})
 
 	FIt("Randomizes admin password", func() {
+		// Generate manifest
+		{
+			manifest, err := config.generateManifest(deploymentNameRandomPassword, enableSshTemplate)
+			Expect(err).To(Succeed())
+
+			manifestFile, err := ioutil.TempFile("", "")
+			Expect(err).To(Succeed())
+
+			_, err = manifestFile.Write(manifest)
+			Expect(err).To(Succeed())
+			manifestFile.Close()
+
+			manifestPath, err = filepath.Abs(manifestFile.Name())
+			Expect(err).To(Succeed())
+		}
+
+		err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameRandomPassword, manifestPath))
+		Expect(err).To(Succeed())
+
+		ip, err := bosh.GetIp(deploymentNameRandomPassword)
+		Expect(err).To(Succeed())
+		Expect(ip).To(MatchRegexp("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$"))
+
 		config := &ssh.ClientConfig{
 			User: "Administrator",
 			Auth: []ssh.AuthMethod{
@@ -492,7 +571,7 @@ var _ = Describe("Windows Utilities Release", func() {
 			},
 			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		}
-		client, err := ssh.Dial("tcp", "10.74.41.7:22", config)
+		client, err := ssh.Dial("tcp", fmt.Sprintf("%v:22", ip), config)
 		if err == nil {
 			client.Close()
 			Fail("connected via ssh. password was not randimzed")
