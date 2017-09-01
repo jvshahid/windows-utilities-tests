@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/ssh"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
@@ -482,8 +484,23 @@ var _ = Describe("Windows Utilities Release", func() {
 		Expect(err).To(Succeed())
 	})
 
+	FIt("Randomizes admin password", func() {
+		config := &ssh.ClientConfig{
+			User: "Administrator",
+			Auth: []ssh.AuthMethod{
+				ssh.Password("Password123!"),
+			},
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		}
+		client, err := ssh.Dial("tcp", "10.74.41.7:22", config)
+		if err == nil {
+			client.Close()
+			Fail("connected via ssh. password was not randimzed")
+		}
+	})
+
 	AfterSuite(func() {
-		bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentName))
+		//bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentName))
 
 		// WARN WARN WARN WARN
 		//
