@@ -449,7 +449,7 @@ var _ = Describe("Windows Utilities Release", func() {
 		Expect(err).To(Succeed())
 	})
 
-	FIt("Enables and then disables SSH", func() {
+	It("Enables and then disables SSH", func() {
 		// Generate ssh manifest
 		{
 			manifest, err := config.generateManifestSSH(deploymentNameSSH, true)
