@@ -485,14 +485,12 @@ var _ = Describe("Windows Utilities Release", func() {
 	AfterSuite(func() {
 		bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentName))
 
-		// WARN WARN WARN WARN
-		//
-		// bosh.Run("clean-up --all")
-		// if bosh.CertPath != "" {
-		// 	os.RemoveAll(bosh.CertPath)
-		// }
-		// if manifestPath != "" {
-		// 	os.RemoveAll(manifestPath)
-		// }
+		bosh.Run("clean-up --all")
+		if bosh.CertPath != "" {
+			os.RemoveAll(bosh.CertPath)
+		}
+		if manifestPath != "" {
+			os.RemoveAll(manifestPath)
+		}
 	})
 })
