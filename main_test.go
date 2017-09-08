@@ -183,6 +183,8 @@ type Config struct {
 		Client       string `json:"client"`
 		ClientSecret string `json:"client_secret"`
 		Target       string `json:"target"`
+		GwPrivateKey string `json:"gw_private_key"`
+		GwUser       string `json:"gw_user"`
 	} `json:"bosh"`
 	StemcellPath         string `json:"stemcell_path"`
 	WindowsUtilitiesPath string `json:"windows_utilities_path"`
@@ -257,20 +259,24 @@ func (c *Config) generateManifestSSH(deploymentName string, enabled bool) ([]byt
 }
 
 type BoshCommand struct {
-	DirectorIP   string
-	Client       string
-	ClientSecret string
-	CertPath     string // Path to CA CERT file, if any
-	Timeout      time.Duration
+	DirectorIP       string
+	Client           string
+	ClientSecret     string
+	CertPath         string // Path to CA CERT file, if any
+	Timeout          time.Duration
+	GwPrivateKeyPath string // Path to key file
+	GwUser           string
 }
 
-func NewBoshCommand(config *Config, CertPath string, duration time.Duration) *BoshCommand {
+func NewBoshCommand(config *Config, CertPath string, GwPrivateKeyPath string, duration time.Duration) *BoshCommand {
 	return &BoshCommand{
-		DirectorIP:   config.Bosh.Target,
-		Client:       config.Bosh.Client,
-		ClientSecret: config.Bosh.ClientSecret,
-		CertPath:     CertPath,
-		Timeout:      duration,
+		DirectorIP:       config.Bosh.Target,
+		Client:           config.Bosh.Client,
+		ClientSecret:     config.Bosh.ClientSecret,
+		CertPath:         CertPath,
+		Timeout:          duration,
+		GwPrivateKeyPath: GwPrivateKeyPath,
+		GwUser:           config.Bosh.GwUser,
 	}
 }
 
@@ -359,6 +365,21 @@ var (
 	boshCertPath      string
 )
 
+func writeCert(cert string) string {
+	if cert != "" {
+		certFile, err := ioutil.TempFile("", "")
+		Expect(err).To(Succeed())
+
+		_, err = certFile.Write([]byte(cert))
+		Expect(err).To(Succeed())
+
+		boshCertPath, err = filepath.Abs(certFile.Name())
+		Expect(err).To(Succeed())
+		return boshCertPath
+	}
+	return ""
+}
+
 var _ = Describe("Windows Utilities Release", func() {
 	var config *Config
 
@@ -367,19 +388,9 @@ var _ = Describe("Windows Utilities Release", func() {
 		config, err = NewConfig()
 		Expect(err).To(Succeed())
 
-		cert := config.Bosh.CaCert
-		if cert != "" {
-			certFile, err := ioutil.TempFile("", "")
-			Expect(err).To(Succeed())
-
-			_, err = certFile.Write([]byte(cert))
-			Expect(err).To(Succeed())
-
-			boshCertPath, err = filepath.Abs(certFile.Name())
-			Expect(err).To(Succeed())
-		}
-
-		bosh = NewBoshCommand(config, boshCertPath, BOSH_TIMEOUT)
+		boshCertPath := writeCert(config.Bosh.CaCert)
+		boshGwPrivateKeyPath := writeCert(config.Bosh.GwPrivateKey)
+		bosh = NewBoshCommand(config, boshCertPath, boshGwPrivateKeyPath, BOSH_TIMEOUT)
 
 		bosh.Run("login")
 		deploymentName = fmt.Sprintf("windows-utilities-test-%d", time.Now().UTC().Unix())
@@ -449,7 +460,7 @@ var _ = Describe("Windows Utilities Release", func() {
 		Expect(err).To(Succeed())
 	})
 
-	It("Enables and then disables SSH", func() {
+	FIt("Enables and then disables SSH", func() {
 		// Generate ssh manifest
 		{
 			manifest, err := config.generateManifestSSH(deploymentNameSSH, true)
@@ -469,6 +480,10 @@ var _ = Describe("Windows Utilities Release", func() {
 		err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameSSH, manifestPathSSH))
 		Expect(err).To(Succeed())
 
+		// Try to ssh into windows cell
+		err = bosh.Run(fmt.Sprintf("-d %s ssh --opts='-T' --command=exit check-ssh/0 --gw-user %s --gw-host %s --gw-private-key %s", deploymentNameSSH, bosh.GwUser, bosh.DirectorIP, bosh.GwPrivateKeyPath))
+		Expect(err).To(Succeed())
+
 		// Regenerate the manifest
 		{
 			manifest, err := config.generateManifestSSH(deploymentNameSSH, false)
@@ -480,6 +495,10 @@ var _ = Describe("Windows Utilities Release", func() {
 
 		err = bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameSSH, manifestPathSSH))
 		Expect(err).To(Succeed())
+
+		// Try to ssh into windows cell
+		err = bosh.Run(fmt.Sprintf("-d %s ssh --opts='-T' --command=exit check-ssh/0 --gw-user %s --gw-host %s --gw-private-key %s", deploymentNameSSH, bosh.GwUser, bosh.DirectorIP, bosh.GwPrivateKeyPath))
+		Expect(err).NotTo(Succeed())
 	})
 
 	AfterSuite(func() {

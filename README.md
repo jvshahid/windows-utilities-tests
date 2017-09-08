@@ -12,7 +12,9 @@ You can create a `config.json` file, eg:
     "ca_cert": "<contents of your bosh director cert, with \n for newlines>",
     "client": "<bosh client name>",
     "client_secret": "<bosh client secret>",
-    "target": "<IP of your bosh director>"
+    "target": "<IP of your bosh director>",
+    "gw_private_key": "<contents of your bosh keypair private key, with \n for newlines>",
+    "gw_user": "<bosh gw user e.g. vcap or jumpbox>"
   },
   "stemcell_path": "<absolute path to stemcell tgz>",
   "windows_utilities_path": "<absolute path to windows utilities release tgz>",
