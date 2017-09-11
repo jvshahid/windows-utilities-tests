@@ -460,7 +460,7 @@ var _ = Describe("Windows Utilities Release", func() {
 		Expect(err).To(Succeed())
 	})
 
-	FIt("Enables and then disables SSH", func() {
+	It("Enables and then disables SSH", func() {
 		// Generate ssh manifest
 		{
 			manifest, err := config.generateManifestSSH(deploymentNameSSH, true)
@@ -481,7 +481,7 @@ var _ = Describe("Windows Utilities Release", func() {
 		Expect(err).To(Succeed())
 
 		// Try to ssh into windows cell
-		err = bosh.Run(fmt.Sprintf("-d %s ssh --opts='-T' --command=exit check-ssh/0 --gw-user %s --gw-host %s --gw-private-key %s", deploymentNameSSH, bosh.GwUser, bosh.DirectorIP, bosh.GwPrivateKeyPath))
+		err = bosh.Run(fmt.Sprintf("-d %s ssh --opts=-T --command=exit check-ssh/0 --gw-user %s --gw-host %s --gw-private-key %s", deploymentNameSSH, bosh.GwUser, bosh.DirectorIP, bosh.GwPrivateKeyPath))
 		Expect(err).To(Succeed())
 
 		// Regenerate the manifest
@@ -497,16 +497,23 @@ var _ = Describe("Windows Utilities Release", func() {
 		Expect(err).To(Succeed())
 
 		// Try to ssh into windows cell
-		err = bosh.Run(fmt.Sprintf("-d %s ssh --opts='-T' --command=exit check-ssh/0 --gw-user %s --gw-host %s --gw-private-key %s", deploymentNameSSH, bosh.GwUser, bosh.DirectorIP, bosh.GwPrivateKeyPath))
+		err = bosh.Run(fmt.Sprintf("-d %s ssh --opts=-T --command=exit check-ssh/0 --gw-user %s --gw-host %s --gw-private-key %s", deploymentNameSSH, bosh.GwUser, bosh.DirectorIP, bosh.GwPrivateKeyPath))
 		Expect(err).NotTo(Succeed())
 	})
 
 	AfterSuite(func() {
 		bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentName))
+		bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameSSH))
 
 		bosh.Run("clean-up --all")
 		if bosh.CertPath != "" {
 			os.RemoveAll(bosh.CertPath)
+		}
+		if bosh.GwPrivateKeyPath != "" {
+			os.RemoveAll(bosh.GwPrivateKeyPath)
+		}
+		if manifestPathSSH != "" {
+			os.RemoveAll(manifestPathSSH)
 		}
 		if manifestPath != "" {
 			os.RemoveAll(manifestPath)
