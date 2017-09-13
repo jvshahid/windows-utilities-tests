@@ -136,3 +136,47 @@ instance_groups:
       check_ssh:
         expected: {{.SSHEnabled}}
 `
+
+const rdpTemplate = `
+---
+name: {{.DeploymentName}}
+
+releases:
+- name: {{.ReleaseName}}
+  version: latest
+- name: windows-utilities
+  version: latest
+
+stemcells:
+- alias: windows
+  os: {{.StemcellOS}}
+  version: latest
+
+update:
+  canaries: 0
+  canary_watch_time: 60000
+  update_watch_time: 60000
+  max_in_flight: 2
+
+instance_groups:
+- name: check-rdp
+  instances: 1
+  stemcell: windows
+  lifecycle: service # run as service
+  azs: [{{.AZ}}]
+  vm_type: {{.VmType}}
+  vm_extensions: [{{.VmExtensions}}]
+  networks:
+  - name: {{.Network}}
+  jobs:
+  - name: enable_rdp
+    release: windows-utilities
+    properties:
+      enable_rdp:
+        enabled: {{.RDPEnabled}}
+  - name: check_rdp
+    release: {{.ReleaseName}}
+    properties:
+      check_rdp:
+        expected: {{.RDPEnabled}}
+`

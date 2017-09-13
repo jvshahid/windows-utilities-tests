@@ -1,4 +1,4 @@
-package windows_utilities_tests_test
+package main
 
 import (
 	"bytes"
@@ -122,6 +122,33 @@ func (c *Config) generateManifestSSH(deploymentName string, enabled bool) ([]byt
 	return buf.Bytes(), err
 }
 
+type RDPManifestProperties struct {
+	ManifestProperties
+	RDPEnabled bool
+}
+
+func (c *Config) generateManifestRDP(deploymentName string, enabled bool) ([]byte, error) {
+	manifestProperties := RDPManifestProperties{
+		ManifestProperties: ManifestProperties{
+			DeploymentName: deploymentName,
+			ReleaseName:    "wuts-release",
+			AZ:             c.Az,
+			VmType:         c.VmType,
+			VmExtensions:   c.VmExtensions,
+			Network:        c.Network,
+			StemcellOS:     c.StemcellOS,
+		},
+		RDPEnabled: enabled,
+	}
+	templ, err := template.New("").Parse(rdpTemplate)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	err = templ.Execute(&buf, manifestProperties)
+	return buf.Bytes(), err
+}
+
 type BoshCommand struct {
 	DirectorIP       string
 	Client           string
@@ -224,8 +251,10 @@ var (
 	bosh              *BoshCommand
 	deploymentName    string
 	deploymentNameSSH string
+	deploymentNameRDP string
 	manifestPath      string
 	manifestPathSSH   string
+	manifestPathRDP   string
 	boshCertPath      string
 )
 
@@ -259,6 +288,7 @@ var _ = Describe("Windows Utilities Release", func() {
 		Expect(bosh.Run("login")).To(Succeed())
 		deploymentName = fmt.Sprintf("windows-utilities-test-%d", time.Now().UTC().Unix())
 		deploymentNameSSH = fmt.Sprintf("windows-utilities-test-ssh-%d", time.Now().UTC().Unix())
+		deploymentNameRDP = fmt.Sprintf("windows-utilities-test-rdp-%d", time.Now().UTC().Unix())
 
 		pwd, err := os.Getwd()
 		Expect(err).To(Succeed())
@@ -368,9 +398,43 @@ var _ = Describe("Windows Utilities Release", func() {
 		Expect(err).NotTo(Succeed())
 	})
 
+	It("Enables and then disables RDP", func() {
+		// Generate rdp manifest
+		{
+			manifest, err := config.generateManifestRDP(deploymentNameRDP, true)
+			Expect(err).To(Succeed())
+
+			manifestFile, err := ioutil.TempFile("", "")
+			Expect(err).To(Succeed())
+
+			_, err = manifestFile.Write(manifest)
+			Expect(err).To(Succeed())
+			manifestFile.Close()
+
+			manifestPathRDP, err = filepath.Abs(manifestFile.Name())
+			Expect(err).To(Succeed())
+		}
+
+		err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameRDP, manifestPathRDP))
+		Expect(err).To(Succeed())
+
+		// Regenerate the manifest
+		{
+			manifest, err := config.generateManifestRDP(deploymentNameRDP, false)
+			Expect(err).To(Succeed())
+
+			err = ioutil.WriteFile(manifestPathRDP, manifest, 0644)
+			Expect(err).To(Succeed())
+		}
+
+		err = bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameRDP, manifestPathRDP))
+		Expect(err).To(Succeed())
+	})
+
 	AfterSuite(func() {
-		Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentName))).To(Succeed())
-		Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameSSH))).To(Succeed())
+		bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentName))
+		bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameSSH))
+		bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameRDP))
 
 		Expect(bosh.Run("clean-up --all")).To(Succeed())
 		if bosh.CertPath != "" {
@@ -381,6 +445,9 @@ var _ = Describe("Windows Utilities Release", func() {
 		}
 		if manifestPathSSH != "" {
 			Expect(os.RemoveAll(manifestPathSSH)).To(Succeed())
+		}
+		if manifestPathRDP != "" {
+			os.RemoveAll(manifestPathRDP)
 		}
 		if manifestPath != "" {
 			Expect(os.RemoveAll(manifestPath)).To(Succeed())

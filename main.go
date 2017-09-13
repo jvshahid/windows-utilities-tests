@@ -1,1 +1,5 @@
-package windows_utilities_tests
+package main
+
+func main() {
+	println("Not a real main!!!")
+}
