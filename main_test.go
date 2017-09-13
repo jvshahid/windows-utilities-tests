@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -461,6 +462,9 @@ var _ = Describe("Windows Utilities Release", func() {
 	})
 
 	It("Enables and then disables SSH", func() {
+		directorURL, err := url.Parse(bosh.DirectorIP)
+		Expect(err).NotTo(HaveOccurred())
+
 		// Generate ssh manifest
 		{
 			manifest, err := config.generateManifestSSH(deploymentNameSSH, true)
@@ -471,17 +475,17 @@ var _ = Describe("Windows Utilities Release", func() {
 
 			_, err = manifestFile.Write(manifest)
 			Expect(err).To(Succeed())
-			manifestFile.Close()
+			Expect(manifestFile.Close()).To(Succeed())
 
 			manifestPathSSH, err = filepath.Abs(manifestFile.Name())
 			Expect(err).To(Succeed())
 		}
 
-		err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameSSH, manifestPathSSH))
+		err = bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameSSH, manifestPathSSH))
 		Expect(err).To(Succeed())
 
 		// Try to ssh into windows cell
-		err = bosh.Run(fmt.Sprintf("-d %s ssh --opts=-T --command=exit check-ssh/0 --gw-user %s --gw-host %s --gw-private-key %s", deploymentNameSSH, bosh.GwUser, bosh.DirectorIP, bosh.GwPrivateKeyPath))
+		err = bosh.Run(fmt.Sprintf("-d %s ssh --opts=-T --command=exit check-ssh/0 --gw-user %s --gw-host %s --gw-private-key %s", deploymentNameSSH, bosh.GwUser, directorURL.Hostname(), bosh.GwPrivateKeyPath))
 		Expect(err).To(Succeed())
 
 		// Regenerate the manifest
@@ -497,7 +501,7 @@ var _ = Describe("Windows Utilities Release", func() {
 		Expect(err).To(Succeed())
 
 		// Try to ssh into windows cell
-		err = bosh.Run(fmt.Sprintf("-d %s ssh --opts=-T --command=exit check-ssh/0 --gw-user %s --gw-host %s --gw-private-key %s", deploymentNameSSH, bosh.GwUser, bosh.DirectorIP, bosh.GwPrivateKeyPath))
+		err = bosh.Run(fmt.Sprintf("-d %s ssh --opts=-T --command=exit check-ssh/0 --gw-user %s --gw-host %s --gw-private-key %s", deploymentNameSSH, bosh.GwUser, directorURL.Hostname(), bosh.GwPrivateKeyPath))
 		Expect(err).NotTo(Succeed())
 	})
 
