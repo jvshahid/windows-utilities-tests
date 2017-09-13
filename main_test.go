@@ -393,7 +393,7 @@ var _ = Describe("Windows Utilities Release", func() {
 		boshGwPrivateKeyPath := writeCert(config.Bosh.GwPrivateKey)
 		bosh = NewBoshCommand(config, boshCertPath, boshGwPrivateKeyPath, BOSH_TIMEOUT)
 
-		bosh.Run("login")
+		Expect(bosh.Run("login")).To(Succeed())
 		deploymentName = fmt.Sprintf("windows-utilities-test-%d", time.Now().UTC().Unix())
 		deploymentNameSSH = fmt.Sprintf("windows-utilities-test-ssh-%d", time.Now().UTC().Unix())
 
@@ -506,21 +506,21 @@ var _ = Describe("Windows Utilities Release", func() {
 	})
 
 	AfterSuite(func() {
-		bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentName))
-		bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameSSH))
+		Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentName))).To(Succeed())
+		Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameSSH))).To(Succeed())
 
-		bosh.Run("clean-up --all")
+		Expect(bosh.Run("clean-up --all")).To(Succeed())
 		if bosh.CertPath != "" {
-			os.RemoveAll(bosh.CertPath)
+			Expect(os.RemoveAll(bosh.CertPath)).To(Succeed())
 		}
 		if bosh.GwPrivateKeyPath != "" {
-			os.RemoveAll(bosh.GwPrivateKeyPath)
+			Expect(os.RemoveAll(bosh.GwPrivateKeyPath)).To(Succeed())
 		}
 		if manifestPathSSH != "" {
-			os.RemoveAll(manifestPathSSH)
+			Expect(os.RemoveAll(manifestPathSSH)).To(Succeed())
 		}
 		if manifestPath != "" {
-			os.RemoveAll(manifestPath)
+			Expect(os.RemoveAll(manifestPath)).To(Succeed())
 		}
 	})
 })
