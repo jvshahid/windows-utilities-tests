@@ -384,8 +384,12 @@ var _ = Describe("Windows Utilities Release", func() {
 		deploymentNameSSH = fmt.Sprintf("windows-utilities-test-ssh-%d", time.Now().UTC().Unix())
 		deploymentNameRDP = fmt.Sprintf("windows-utilities-test-rdp-%d", time.Now().UTC().Unix())
 
+		matches, err := filepath.Glob(config.StemcellPath)
+		Expect(err).To(Succeed())
+		Expect(matches).To(HaveLen(1))
+
 		var stemcellInfo ManifestInfo
-		stemcellInfo, err = fetchManifestInfo(config.StemcellPath, "stemcell.MF")
+		stemcellInfo, err = fetchManifestInfo(matches[0], "stemcell.MF")
 		Expect(err).To(Succeed())
 
 		stemcellVersion = stemcellInfo.Version
@@ -431,7 +435,7 @@ var _ = Describe("Windows Utilities Release", func() {
 		Expect(bosh.Run("upload-release")).To(Succeed())
 
 		// Upload latest windows-utilities release
-		matches, err := filepath.Glob(config.WindowsUtilitiesPath)
+		matches, err = filepath.Glob(config.WindowsUtilitiesPath)
 		Expect(err).To(Succeed(),
 			fmt.Sprintf("expected to find windows-utilities at: %s", config.WindowsUtilitiesPath))
 		Expect(matches).To(HaveLen(1),
