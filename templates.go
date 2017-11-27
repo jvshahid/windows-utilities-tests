@@ -8,12 +8,12 @@ releases:
 - name: {{.ReleaseName}}
   version: latest
 - name: windows-utilities
-  version: latest
+  version: '{{.WinUtilVersion}}'
 
 stemcells:
 - alias: windows
   os: {{.StemcellOS}}
-  version: latest
+  version: '{{.StemcellVersion}}'
 
 update:
   canaries: 0
@@ -101,12 +101,12 @@ releases:
 - name: {{.ReleaseName}}
   version: latest
 - name: windows-utilities
-  version: latest
+  version: '{{.WinUtilVersion}}'
 
 stemcells:
 - alias: windows
   os: {{.StemcellOS}}
-  version: latest
+  version: '{{.StemcellVersion}}'
 
 update:
   canaries: 0
@@ -145,12 +145,12 @@ releases:
 - name: {{.ReleaseName}}
   version: latest
 - name: windows-utilities
-  version: latest
+  version: '{{.WinUtilVersion}}'
 
 stemcells:
 - alias: windows
   os: {{.StemcellOS}}
-  version: latest
+  version: '{{.StemcellVersion}}'
 
 update:
   canaries: 0

@@ -20,6 +20,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
+	"gopkg.in/yaml.v2"
 )
 
 func init() {
@@ -32,13 +33,15 @@ const GoZipFile = "go1.7.1.windows-amd64.zip"
 const GolangURL = "https://storage.googleapis.com/golang/" + GoZipFile
 
 type ManifestProperties struct {
-	DeploymentName string
-	ReleaseName    string
-	AZ             string
-	VmType         string
-	VmExtensions   string
-	Network        string
-	StemcellOS     string
+	DeploymentName  string
+	ReleaseName     string
+	AZ              string
+	VmType          string
+	VmExtensions    string
+	Network         string
+	StemcellOS      string
+	StemcellVersion string
+	WinUtilVersion  string
 }
 
 type Config struct {
@@ -57,6 +60,7 @@ type Config struct {
 	VmType               string `json:"vm_type"`
 	VmExtensions         string `json:"vm_extensions"`
 	Network              string `json:"network"`
+	SkipCleanup          bool   `json:"skip_cleanup"`
 }
 
 func NewConfig() (*Config, error) {
@@ -76,15 +80,17 @@ func NewConfig() (*Config, error) {
 	return &config, nil
 }
 
-func (c *Config) generateManifest(deploymentName string) ([]byte, error) {
+func (c *Config) generateManifest(deploymentName string, stemcellVersion string, winUtilVersion string) ([]byte, error) {
 	manifestProperties := ManifestProperties{
-		DeploymentName: deploymentName,
-		ReleaseName:    "wuts-release",
-		AZ:             c.Az,
-		VmType:         c.VmType,
-		VmExtensions:   c.VmExtensions,
-		Network:        c.Network,
-		StemcellOS:     c.StemcellOS,
+		DeploymentName:  deploymentName,
+		ReleaseName:     "wuts-release",
+		AZ:              c.Az,
+		VmType:          c.VmType,
+		VmExtensions:    c.VmExtensions,
+		Network:         c.Network,
+		StemcellOS:      c.StemcellOS,
+		StemcellVersion: stemcellVersion,
+		WinUtilVersion:  winUtilVersion,
 	}
 	templ, err := template.New("").Parse(manifestTemplate)
 	if err != nil {
@@ -100,16 +106,18 @@ type SSHManifestProperties struct {
 	SSHEnabled bool
 }
 
-func (c *Config) generateManifestSSH(deploymentName string, enabled bool) ([]byte, error) {
+func (c *Config) generateManifestSSH(deploymentName string, stemcellVersion string, winUtilVersion string, enabled bool) ([]byte, error) {
 	manifestProperties := SSHManifestProperties{
 		ManifestProperties: ManifestProperties{
-			DeploymentName: deploymentName,
-			ReleaseName:    "wuts-release",
-			AZ:             c.Az,
-			VmType:         c.VmType,
-			VmExtensions:   c.VmExtensions,
-			Network:        c.Network,
-			StemcellOS:     c.StemcellOS,
+			DeploymentName:  deploymentName,
+			ReleaseName:     "wuts-release",
+			AZ:              c.Az,
+			VmType:          c.VmType,
+			VmExtensions:    c.VmExtensions,
+			Network:         c.Network,
+			StemcellOS:      c.StemcellOS,
+			StemcellVersion: stemcellVersion,
+			WinUtilVersion:  winUtilVersion,
 		},
 		SSHEnabled: enabled,
 	}
@@ -127,16 +135,18 @@ type RDPManifestProperties struct {
 	RDPEnabled bool
 }
 
-func (c *Config) generateManifestRDP(deploymentName string, enabled bool) ([]byte, error) {
+func (c *Config) generateManifestRDP(deploymentName string, stemcellVersion string, winUtilVersion string, enabled bool) ([]byte, error) {
 	manifestProperties := RDPManifestProperties{
 		ManifestProperties: ManifestProperties{
-			DeploymentName: deploymentName,
-			ReleaseName:    "wuts-release",
-			AZ:             c.Az,
-			VmType:         c.VmType,
-			VmExtensions:   c.VmExtensions,
-			Network:        c.Network,
-			StemcellOS:     c.StemcellOS,
+			DeploymentName:  deploymentName,
+			ReleaseName:     "wuts-release",
+			AZ:              c.Az,
+			VmType:          c.VmType,
+			VmExtensions:    c.VmExtensions,
+			Network:         c.Network,
+			StemcellOS:      c.StemcellOS,
+			StemcellVersion: stemcellVersion,
+			WinUtilVersion:  winUtilVersion,
 		},
 		RDPEnabled: enabled,
 	}
@@ -203,6 +213,35 @@ func (c *BoshCommand) Run(command string) error {
 	return nil
 }
 
+func (c *BoshCommand) RunInStdOut(command, dir string) ([]byte, error) {
+	cmd := exec.Command("bosh", c.args(command)...)
+	if dir != "" {
+		cmd.Dir = dir
+		log.Printf("\nRUNNING %q IN %q\n", strings.Join(cmd.Args, " "), dir)
+	} else {
+		log.Printf("\nRUNNING %q\n", strings.Join(cmd.Args, " "))
+	}
+
+	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+	if err != nil {
+		return nil, err
+	}
+	session.Wait(c.Timeout)
+
+	exitCode := session.ExitCode()
+	stdout := session.Out.Contents()
+	if exitCode != 0 {
+		var stderr []byte
+		if session.Err != nil {
+			stderr = session.Err.Contents()
+		}
+		return stdout, fmt.Errorf("Non-zero exit code for cmd %q: %d\nSTDERR:\n%s\nSTDOUT:%s\n",
+			strings.Join(cmd.Args, " "), exitCode, stderr, stdout)
+	}
+	return stdout, nil
+}
+
+//noinspection GoUnusedFunction
 func downloadGo() (string, error) {
 	dirname, err := ioutil.TempDir("", "")
 	if err != nil {
@@ -228,6 +267,7 @@ func downloadGo() (string, error) {
 	return path, nil
 }
 
+//noinspection GoUnusedFunction
 func downloadLogs(jobName string, index int) *gbytes.Buffer {
 	tempDir, err := ioutil.TempDir("", "")
 	Expect(err).To(Succeed())
@@ -247,6 +287,52 @@ func downloadLogs(jobName string, index int) *gbytes.Buffer {
 	return session.Wait().Out
 }
 
+type BoshStemcell struct {
+	Tables []struct {
+		Rows []struct {
+			Version string `json:"version"`
+		} `json:"Rows"`
+	} `json:"Tables"`
+}
+
+type ManifestInfo struct {
+	Version string `yaml:"version"`
+	Name    string `yaml:"name"`
+}
+
+func fetchManifestInfo(releasePath string, manifestFilename string) (ManifestInfo, error) {
+	var stemcellInfo ManifestInfo
+	tempDir, err := ioutil.TempDir("", "")
+	Expect(err).To(Succeed())
+	defer os.RemoveAll(tempDir)
+
+	cmd := exec.Command("tar", "xf", releasePath, "-C", tempDir, manifestFilename)
+	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+	Expect(err).To(Succeed())
+	session.Wait(20 * time.Minute)
+
+	exitCode := session.ExitCode()
+	if exitCode != 0 {
+		var stderr []byte
+		if session.Err != nil {
+			stderr = session.Err.Contents()
+		}
+		stdout := session.Out.Contents()
+		return stemcellInfo, fmt.Errorf("Non-zero exit code for cmd %q: %d\nSTDERR:\n%s\nSTDOUT:%s\n",
+			strings.Join(cmd.Args, " "), exitCode, stderr, stdout)
+	}
+
+	stemcellMF, err := ioutil.ReadFile(fmt.Sprintf("%s/%s", tempDir, manifestFilename))
+	Expect(err).To(Succeed())
+
+	err = yaml.Unmarshal(stemcellMF, &stemcellInfo)
+	Expect(err).To(Succeed())
+	Expect(stemcellInfo.Version).ToNot(BeNil())
+	Expect(stemcellInfo.Version).ToNot(BeEmpty())
+
+	return stemcellInfo, nil
+}
+
 var (
 	bosh              *BoshCommand
 	deploymentName    string
@@ -256,6 +342,10 @@ var (
 	manifestPathSSH   string
 	manifestPathRDP   string
 	boshCertPath      string
+	stemcellName      string
+	stemcellVersion   string
+	releaseVersion    string
+	winUtilRelVersion string
 )
 
 func writeCert(cert string) string {
@@ -271,6 +361,10 @@ func writeCert(cert string) string {
 		return boshCertPath
 	}
 	return ""
+}
+
+func getTimestampInMs() int64 {
+	return time.Now().UTC().UnixNano() / int64(time.Millisecond)
 }
 
 var _ = Describe("Windows Utilities Release", func() {
@@ -290,13 +384,37 @@ var _ = Describe("Windows Utilities Release", func() {
 		deploymentNameSSH = fmt.Sprintf("windows-utilities-test-ssh-%d", time.Now().UTC().Unix())
 		deploymentNameRDP = fmt.Sprintf("windows-utilities-test-rdp-%d", time.Now().UTC().Unix())
 
+		var stemcellInfo ManifestInfo
+		stemcellInfo, err = fetchManifestInfo(config.StemcellPath, "stemcell.MF")
+		Expect(err).To(Succeed())
+
+		stemcellVersion = stemcellInfo.Version
+		stemcellName = stemcellInfo.Name
+
+		var winUtilInfo ManifestInfo
+		winUtilInfo, err = fetchManifestInfo(config.WindowsUtilitiesPath, "release.MF")
+		Expect(err).To(Succeed())
+		winUtilRelVersion = winUtilInfo.Version
+
+		// get the output of bosh stemcells
+		var stdout []byte
+		stdout, err = bosh.RunInStdOut("stemcells --json", "")
+		Expect(err).To(Succeed())
+
+		// Ensure stemcell version has not already been uploaded to bosh director
+		var stdoutInfo BoshStemcell
+		json.Unmarshal(stdout, &stdoutInfo)
+		for _, row := range stdoutInfo.Tables[0].Rows {
+			Expect(row.Version).NotTo(ContainSubstring(stemcellVersion))
+		}
+
 		pwd, err := os.Getwd()
 		Expect(err).To(Succeed())
 		Expect(os.Chdir(filepath.Join(pwd, "assets", "wuts-release"))).To(Succeed()) // push
 		defer os.Chdir(pwd)                                                          // pop
 
 		// Generate main manifest
-		manifest, err := config.generateManifest(deploymentName)
+		manifest, err := config.generateManifest(deploymentName, stemcellVersion, winUtilRelVersion)
 		Expect(err).To(Succeed())
 		manifestFile, err := ioutil.TempFile("", "")
 		Expect(err).To(Succeed())
@@ -305,8 +423,11 @@ var _ = Describe("Windows Utilities Release", func() {
 		manifestPath, err = filepath.Abs(manifestFile.Name())
 		Expect(err).To(Succeed())
 
+		// Generate WUTS release version
+		releaseVersion = fmt.Sprintf("0.dev+%d", getTimestampInMs())
+
 		// Upload wuts-release from this repository
-		Expect(bosh.Run("create-release --force --timestamp-version")).To(Succeed())
+		Expect(bosh.Run(fmt.Sprintf("create-release --force --version %s", releaseVersion))).To(Succeed())
 		Expect(bosh.Run("upload-release")).To(Succeed())
 
 		// Upload latest windows-utilities release
@@ -355,12 +476,13 @@ var _ = Describe("Windows Utilities Release", func() {
 	})
 
 	It("Enables and then disables SSH", func() {
-		directorURL, err := url.Parse(bosh.DirectorIP)
+		directorURL, err := url.Parse(fmt.Sprintf("http://%s", bosh.DirectorIP))
+
 		Expect(err).NotTo(HaveOccurred())
 
 		// Generate ssh manifest
 		{
-			manifest, err := config.generateManifestSSH(deploymentNameSSH, true)
+			manifest, err := config.generateManifestSSH(deploymentNameSSH, stemcellVersion, winUtilRelVersion, true)
 			Expect(err).To(Succeed())
 
 			manifestFile, err := ioutil.TempFile("", "")
@@ -383,7 +505,7 @@ var _ = Describe("Windows Utilities Release", func() {
 
 		// Regenerate the manifest
 		{
-			manifest, err := config.generateManifestSSH(deploymentNameSSH, false)
+			manifest, err := config.generateManifestSSH(deploymentNameSSH, stemcellVersion, winUtilRelVersion, false)
 			Expect(err).To(Succeed())
 
 			err = ioutil.WriteFile(manifestPathSSH, manifest, 0644)
@@ -401,7 +523,7 @@ var _ = Describe("Windows Utilities Release", func() {
 	It("Enables and then disables RDP", func() {
 		// Generate rdp manifest
 		{
-			manifest, err := config.generateManifestRDP(deploymentNameRDP, true)
+			manifest, err := config.generateManifestRDP(deploymentNameRDP, stemcellVersion, winUtilRelVersion, true)
 			Expect(err).To(Succeed())
 
 			manifestFile, err := ioutil.TempFile("", "")
@@ -420,7 +542,7 @@ var _ = Describe("Windows Utilities Release", func() {
 
 		// Regenerate the manifest
 		{
-			manifest, err := config.generateManifestRDP(deploymentNameRDP, false)
+			manifest, err := config.generateManifestRDP(deploymentNameRDP, stemcellVersion, winUtilRelVersion, false)
 			Expect(err).To(Succeed())
 
 			err = ioutil.WriteFile(manifestPathRDP, manifest, 0644)
@@ -432,11 +554,17 @@ var _ = Describe("Windows Utilities Release", func() {
 	})
 
 	AfterSuite(func() {
+		if config.SkipCleanup {
+			return
+		}
+
 		bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentName))
 		bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameSSH))
 		bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameRDP))
+		bosh.Run(fmt.Sprintf("delete-stemcell %s/%s", stemcellName, stemcellVersion))
+		bosh.Run(fmt.Sprintf("delete-release wuts-release/%s", releaseVersion))
+		bosh.Run(fmt.Sprintf("delete-release windows-utilities/%s", winUtilRelVersion))
 
-		Expect(bosh.Run("clean-up --all")).To(Succeed())
 		if bosh.CertPath != "" {
 			Expect(os.RemoveAll(bosh.CertPath)).To(Succeed())
 		}
