@@ -6,7 +6,7 @@ name: {{.DeploymentName}}
 
 releases:
 - name: {{.ReleaseName}}
-  version: latest
+  version: {{.WutsVersion}}
 - name: windows-utilities
   version: '{{.WinUtilVersion}}'
 
@@ -99,7 +99,7 @@ name: {{.DeploymentName}}
 
 releases:
 - name: {{.ReleaseName}}
-  version: latest
+  version: {{.WutsVersion}}
 - name: windows-utilities
   version: '{{.WinUtilVersion}}'
 
@@ -143,7 +143,7 @@ name: {{.DeploymentName}}
 
 releases:
 - name: {{.ReleaseName}}
-  version: latest
+  version: {{.WutsVersion}}
 - name: windows-utilities
   version: '{{.WinUtilVersion}}'
 
