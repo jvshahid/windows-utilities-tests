@@ -1,6 +1,6 @@
-package main
+package templates
 
-const manifestTemplate = `
+const ManifestTemplate = `
 ---
 name: {{.DeploymentName}}
 
@@ -91,9 +91,27 @@ instance_groups:
         enabled: true
         host: test.test
         port:
+- name: set-admin-password
+  instances: 1
+  stemcell: windows
+  lifecycle: errand
+  azs: [{{.AZ}}]
+  vm_type: {{.VmType}}
+  vm_extensions: [{{.VmExtensions}}]
+  networks:
+  - name: {{.Network}}
+  jobs:
+  - name: check_set_password
+    release: {{.ReleaseName}}
+  - name: set_password
+    release: windows-utilities
+    properties:
+      set_password:
+        username: "Administrator"
+        password: "Password123!"
 `
 
-const sshTemplate = `
+const SshTemplate = `
 ---
 name: {{.DeploymentName}}
 
@@ -137,7 +155,7 @@ instance_groups:
         expected: {{.SSHEnabled}}
 `
 
-const rdpTemplate = `
+const RdpTemplate = `
 ---
 name: {{.DeploymentName}}
 

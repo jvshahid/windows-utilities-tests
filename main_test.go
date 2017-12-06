@@ -1,4 +1,4 @@
-package main_test
+package wuts_test
 
 import (
 	"bytes"
@@ -16,6 +16,7 @@ import (
 	"text/template"
 	"time"
 
+	. "github.com/cloudfoundry-incubator/windows-utilities-tests/templates"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
@@ -94,7 +95,7 @@ func (c *Config) generateManifest(deploymentName string) ([]byte, error) {
 		WinUtilVersion:  winUtilRelVersion,
 		WutsVersion:     releaseVersion,
 	}
-	templ, err := template.New("").Parse(manifestTemplate)
+	templ, err := template.New("").Parse(ManifestTemplate)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +129,7 @@ func (c *Config) generateManifestSSH(deploymentName string, enabled bool) ([]byt
 		},
 		SSHEnabled: enabled,
 	}
-	templ, err := template.New("").Parse(sshTemplate)
+	templ, err := template.New("").Parse(SshTemplate)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +163,7 @@ func (c *Config) generateManifestRDP(deploymentName string, enabled bool) ([]byt
 		},
 		RDPEnabled: enabled,
 	}
-	templ, err := template.New("").Parse(rdpTemplate)
+	templ, err := template.New("").Parse(RdpTemplate)
 	if err != nil {
 		return nil, err
 	}
@@ -485,6 +486,13 @@ var _ = Describe("Windows Utilities Release", func() {
 		err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentName, manifestPath))
 		Expect(err).To(Succeed())
 		err = bosh.Run(fmt.Sprintf("-d %s run-errand kms-host-enabled-with-default", deploymentName))
+		Expect(err).To(Succeed())
+	})
+
+	PIt("Sets Administrator password correctly", func() {
+		err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentName, manifestPath))
+		Expect(err).To(Succeed())
+		err = bosh.Run(fmt.Sprintf("-d %s run-errand set-admin-password", deploymentName))
 		Expect(err).To(Succeed())
 	})
 
