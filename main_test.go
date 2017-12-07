@@ -489,7 +489,7 @@ var _ = Describe("Windows Utilities Release", func() {
 		Expect(err).To(Succeed())
 	})
 
-	PIt("Sets Administrator password correctly", func() {
+	It("Sets Administrator password correctly", func() {
 		err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentName, manifestPath))
 		Expect(err).To(Succeed())
 		err = bosh.Run(fmt.Sprintf("-d %s run-errand set-admin-password", deploymentName))
