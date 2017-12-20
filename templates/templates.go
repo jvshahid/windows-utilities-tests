@@ -177,7 +177,7 @@ update:
   max_in_flight: 2
 
 instance_groups:
-- name: check-rdp
+- name: {{.InstanceName}}
   instances: 1
   stemcell: windows
   lifecycle: service # run as service
@@ -192,6 +192,13 @@ instance_groups:
     properties:
       enable_rdp:
         enabled: {{.RDPEnabled}}
+  - name: set_password
+    release: windows-utilities
+    properties:
+      set_password:
+        enabled: {{.RDPEnabled}}
+        username: 'Administrator'
+        password: '{{.Password}}'
   - name: check_rdp
     release: {{.ReleaseName}}
     properties:

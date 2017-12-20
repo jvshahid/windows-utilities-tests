@@ -3,10 +3,12 @@ package wuts_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,8 +21,8 @@ import (
 	. "github.com/cloudfoundry-incubator/windows-utilities-tests/templates"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gbytes"
-	"github.com/onsi/gomega/gexec"
+	. "github.com/onsi/gomega/gbytes"
+	. "github.com/onsi/gomega/gexec"
 	"gopkg.in/yaml.v2"
 )
 
@@ -144,10 +146,14 @@ func (c *Config) generateManifestSSH(deploymentName string, enabled bool) ([]byt
 
 type RDPManifestProperties struct {
 	ManifestProperties
-	RDPEnabled bool
+	RDPEnabled         bool
+	SetPasswordEnabled bool
+	InstanceName       string
+	Username           string
+	Password           string
 }
 
-func (c *Config) generateManifestRDP(deploymentName string, enabled bool) ([]byte, error) {
+func (c *Config) generateManifestRDP(deploymentName string, instanceName string, enabled bool, username string, password string) (string, error) {
 	manifestProperties := RDPManifestProperties{
 		ManifestProperties: ManifestProperties{
 			DeploymentName:  deploymentName,
@@ -161,19 +167,40 @@ func (c *Config) generateManifestRDP(deploymentName string, enabled bool) ([]byt
 			WinUtilVersion:  winUtilRelVersion,
 			WutsVersion:     releaseVersion,
 		},
-		RDPEnabled: enabled,
+		RDPEnabled:         enabled,
+		SetPasswordEnabled: enabled,
+		InstanceName:       instanceName,
+		Username:           username,
+		Password:           password,
 	}
+
 	templ, err := template.New("").Parse(RdpTemplate)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
+
 	var buf bytes.Buffer
 	err = templ.Execute(&buf, manifestProperties)
+	if err != nil {
+		return "", err
+	}
 
 	manifest := buf.Bytes()
 	log.Print("\nRDP Manifest: " + string(manifest[:]) + "\n")
 
-	return manifest, err
+	manifestDir, err := ioutil.TempDir("", "")
+
+	if err != nil {
+		return "", err
+	}
+
+	manifestPathRDP := filepath.Join(manifestDir, "rdp.yml")
+	err = ioutil.WriteFile(manifestPathRDP, manifest, 0644)
+	if err != nil {
+		return "", err
+	}
+
+	return manifestPathRDP, nil
 }
 
 type BoshCommand struct {
@@ -211,7 +238,7 @@ func (c *BoshCommand) Run(command string) error {
 	cmd := exec.Command("bosh", c.args(command)...)
 	log.Printf("\nRUNNING %q\n", strings.Join(cmd.Args, " "))
 
-	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+	session, err := Start(cmd, GinkgoWriter, GinkgoWriter)
 	if err != nil {
 		return err
 	}
@@ -239,7 +266,7 @@ func (c *BoshCommand) RunInStdOut(command, dir string) ([]byte, error) {
 		log.Printf("\nRUNNING %q\n", strings.Join(cmd.Args, " "))
 	}
 
-	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+	session, err := Start(cmd, GinkgoWriter, GinkgoWriter)
 	if err != nil {
 		return nil, err
 	}
@@ -256,6 +283,32 @@ func (c *BoshCommand) RunInStdOut(command, dir string) ([]byte, error) {
 			strings.Join(cmd.Args, " "), exitCode, stderr, stdout)
 	}
 	return stdout, nil
+}
+
+func doSSHLogin(targetIP string) *Session {
+	sshLoginDone := make(chan bool, 1)
+	var session *Session
+
+	go func() {
+		defer GinkgoRecover()
+
+		directorAddress := strings.Split(bosh.DirectorIP, ":")[0]
+
+		var err error
+		session, err = runCommand("ssh", "-nNT", fmt.Sprintf("%s@%s", bosh.GwUser, directorAddress), "-i", bosh.GwPrivateKeyPath, "-L", fmt.Sprintf("3389:%s:3389", targetIP), "-o", "StrictHostKeyChecking=no", "-o", "ExitOnForwardFailure=yes")
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(5 * time.Second)
+
+		sshLoginDone <- true
+	}()
+
+	<-sshLoginDone
+
+	return session
+}
+
+func runCommand(cmd string, args ...string) (*Session, error) {
+	return Start(exec.Command(cmd, args...), GinkgoWriter, GinkgoWriter)
 }
 
 //noinspection GoUnusedFunction
@@ -285,7 +338,7 @@ func downloadGo() (string, error) {
 }
 
 //noinspection GoUnusedFunction
-func downloadLogs(jobName string, index int) *gbytes.Buffer {
+func downloadLogs(jobName string, index int) *Buffer {
 	tempDir, err := ioutil.TempDir("", "")
 	Expect(err).To(Succeed())
 	defer os.RemoveAll(tempDir)
@@ -298,10 +351,19 @@ func downloadLogs(jobName string, index int) *gbytes.Buffer {
 	Expect(matches).To(HaveLen(1))
 
 	cmd := exec.Command("tar", "xf", matches[0], "-O", fmt.Sprintf("./%s/%s/job-service-wrapper.out.log", jobName, jobName))
-	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+	session, err := Start(cmd, GinkgoWriter, GinkgoWriter)
 	Expect(err).To(Succeed())
 
 	return session.Wait().Out
+}
+
+type vmInfo struct {
+	Tables []struct {
+		Rows []struct {
+			Instance string `json:"instance"`
+			IPs      string `json:"ips"`
+		} `json:"Rows"`
+	} `json:"Tables"`
 }
 
 type BoshStemcell struct {
@@ -324,7 +386,7 @@ func fetchManifestInfo(releasePath string, manifestFilename string) (ManifestInf
 	defer os.RemoveAll(tempDir)
 
 	cmd := exec.Command("tar", "xf", releasePath, "-C", tempDir, manifestFilename)
-	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+	session, err := Start(cmd, GinkgoWriter, GinkgoWriter)
 	Expect(err).To(Succeed())
 	session.Wait(20 * time.Minute)
 
@@ -400,6 +462,52 @@ func getTimestampInMs() int64 {
 	return time.Now().UTC().UnixNano() / int64(time.Millisecond)
 }
 
+func generateSemiRandomWindowsPassword() string {
+	var (
+		validChars []rune
+		password   string
+	)
+
+	for i := '!'; i <= '~'; i++ {
+		if i != '\'' && i != '"' && i != '`' && i != '\\' {
+			validChars = append(validChars, i)
+		}
+	}
+
+	for i := 0; i < 10; i++ {
+		randomIndex := rand.Intn(len(validChars))
+		password = password + string(validChars[randomIndex])
+	}
+
+	// ensure compliance with Windows password requirements
+	password = password + "Ab!"
+	return password
+}
+
+func getFirstInstanceIP(deployment string, instanceName string) (string, error) {
+	var vms vmInfo
+	stdout, err := bosh.RunInStdOut(fmt.Sprintf("vms -d %s --json", deployment), "")
+	if err != nil {
+		return "", err
+	}
+
+	if err = json.Unmarshal(stdout, &vms); err != nil {
+		return "", err
+	}
+
+	for _, row := range vms.Tables[0].Rows {
+		if strings.HasPrefix(row.Instance, instanceName) {
+			ips := strings.Split(row.IPs, "\n")
+			if len(ips) == 0 {
+				break
+			}
+			return ips[0], nil
+		}
+	}
+
+	return "", errors.New("No instance IPs found!")
+}
+
 var _ = Describe("Windows Utilities Release", func() {
 	var config *Config
 
@@ -407,6 +515,8 @@ var _ = Describe("Windows Utilities Release", func() {
 		var err error
 		config, err = NewConfig()
 		Expect(err).To(Succeed())
+
+		rand.Seed(time.Now().UnixNano())
 
 		boshCertPath := writeCert(config.Bosh.CaCert)
 		boshGwPrivateKeyPath := writeCert(config.Bosh.GwPrivateKey)
@@ -435,7 +545,7 @@ var _ = Describe("Windows Utilities Release", func() {
 
 		// Ensure stemcell version has not already been uploaded to bosh director
 		var stdoutInfo BoshStemcell
-		json.Unmarshal(stdout, &stdoutInfo)
+		Expect(json.Unmarshal(stdout, &stdoutInfo)).To(Succeed())
 		for _, row := range stdoutInfo.Tables[0].Rows {
 			Expect(row.Version).NotTo(ContainSubstring(stemcellVersion))
 		}
@@ -466,6 +576,26 @@ var _ = Describe("Windows Utilities Release", func() {
 			time.Sleep(2 * time.Minute)
 		}
 		Expect(err).To(Succeed())
+	})
+
+	AfterSuite(func() {
+		if config.SkipCleanup {
+			return
+		}
+
+		Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentName))).To(Succeed())
+		Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameSSH))).To(Succeed())
+		Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameRDP))).To(Succeed())
+		Expect(bosh.Run(fmt.Sprintf("delete-stemcell %s/%s", stemcellName, stemcellVersion))).To(Succeed())
+		Expect(bosh.Run(fmt.Sprintf("delete-release wuts-release/%s", releaseVersion))).To(Succeed())
+		Expect(bosh.Run(fmt.Sprintf("delete-release windows-utilities/%s", winUtilRelVersion))).To(Succeed())
+
+		if manifestPathSSH != "" {
+			Expect(os.RemoveAll(manifestPathSSH)).To(Succeed())
+		}
+		if manifestPath != "" {
+			Expect(os.RemoveAll(manifestPath)).To(Succeed())
+		}
 	})
 
 	It("Enables KMS with Host and custom Port", func() {
@@ -541,65 +671,56 @@ var _ = Describe("Windows Utilities Release", func() {
 		Expect(err).NotTo(Succeed())
 	})
 
-	It("Enables and then disables RDP", func() {
-		// Generate rdp manifest
-		{
-			manifest, err := config.generateManifestRDP(deploymentNameRDP, true)
-			Expect(err).To(Succeed())
+	Context("RDP", func() {
+		var (
+			username          string
+			password          string
+			instanceName      string
+			manifestPathRDP   string
+			manifestPathNoRDP string
+		)
 
-			manifestFile, err := ioutil.TempFile("", "")
-			Expect(err).To(Succeed())
+		BeforeEach(func() {
+			var err error
 
-			_, err = manifestFile.Write(manifest)
-			Expect(err).To(Succeed())
-			manifestFile.Close()
+			instanceName = "check-rdp"
+			username = "Administrator"
+			password = generateSemiRandomWindowsPassword()
 
-			manifestPathRDP, err = filepath.Abs(manifestFile.Name())
-			Expect(err).To(Succeed())
-		}
+			manifestPathRDP, err = config.generateManifestRDP(deploymentNameRDP, instanceName, true, username, password)
+			Expect(err).NotTo(HaveOccurred())
 
-		err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameRDP, manifestPathRDP))
-		Expect(err).To(Succeed())
+			manifestPathNoRDP, err = config.generateManifestRDP(deploymentNameRDP, instanceName, true, username, password)
+			Expect(err).NotTo(HaveOccurred())
+		})
 
-		// Regenerate the manifest
-		{
-			manifest, err := config.generateManifestRDP(deploymentNameRDP, false)
-			Expect(err).To(Succeed())
+		AfterEach(func() {
+			Expect(os.RemoveAll(manifestPathRDP)).To(Succeed())
+			Expect(os.RemoveAll(manifestPathNoRDP)).To(Succeed())
+		})
 
-			err = ioutil.WriteFile(manifestPathRDP, manifest, 0644)
-			Expect(err).To(Succeed())
-		}
+		It("Enables and then disables RDP", func() {
+			Expect(bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameRDP, manifestPathRDP))).To(Succeed())
 
-		err = bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameRDP, manifestPathRDP))
-		Expect(err).To(Succeed())
+			instanceIP, err := getFirstInstanceIP(deploymentNameRDP, instanceName)
+			Expect(err).NotTo(HaveOccurred())
+
+			enabledSession := doSSHLogin(instanceIP)
+			defer enabledSession.Kill()
+
+			Eventually(func() (*Session, error) {
+				rdpSession, err := runCommand("/bin/bash", "-c", fmt.Sprintf("xfreerdp /cert-ignore /u:%s /p:'%s' /v:localhost:3389 +auth-only", username, password))
+				Eventually(rdpSession, 30*time.Second).Should(Exit())
+
+				return rdpSession, err
+			}, 3*time.Minute).Should(Exit(0))
+
+			Expect(bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameRDP, manifestPathNoRDP))).To(Succeed())
+
+			disabledSession := doSSHLogin(instanceIP)
+			Eventually(disabledSession).Should(Exit())
+			Eventually(disabledSession.Err).Should(Say(`Could not request local forwarding.`))
+		})
 	})
 
-	AfterSuite(func() {
-		if config.SkipCleanup {
-			return
-		}
-
-		bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentName))
-		bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameSSH))
-		bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameRDP))
-		bosh.Run(fmt.Sprintf("delete-stemcell %s/%s", stemcellName, stemcellVersion))
-		bosh.Run(fmt.Sprintf("delete-release wuts-release/%s", releaseVersion))
-		bosh.Run(fmt.Sprintf("delete-release windows-utilities/%s", winUtilRelVersion))
-
-		if bosh.CertPath != "" {
-			Expect(os.RemoveAll(bosh.CertPath)).To(Succeed())
-		}
-		if bosh.GwPrivateKeyPath != "" {
-			Expect(os.RemoveAll(bosh.GwPrivateKeyPath)).To(Succeed())
-		}
-		if manifestPathSSH != "" {
-			Expect(os.RemoveAll(manifestPathSSH)).To(Succeed())
-		}
-		if manifestPathRDP != "" {
-			os.RemoveAll(manifestPathRDP)
-		}
-		if manifestPath != "" {
-			Expect(os.RemoveAll(manifestPath)).To(Succeed())
-		}
-	})
 })
