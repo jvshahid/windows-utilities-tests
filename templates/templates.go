@@ -111,7 +111,7 @@ instance_groups:
         password: "Password123!"
 `
 
-const SshTemplate = `
+const SSHTemplate = `
 ---
 name: {{.DeploymentName}}
 
@@ -155,13 +155,13 @@ instance_groups:
         expected: {{.SSHEnabled}}
 `
 
-const RdpTemplate = `
+const RDPTemplate = `
 ---
 name: {{.DeploymentName}}
 
 releases:
 - name: {{.ReleaseName}}
-  version: {{.WutsVersion}}
+  version: '{{.WutsVersion}}'
 - name: windows-utilities
   version: '{{.WinUtilVersion}}'
 
