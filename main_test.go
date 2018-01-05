@@ -228,8 +228,6 @@ var _ = Describe("Windows Utilities Release", func() {
 				return rdpSession, err
 			}, 3*time.Minute).Should(Exit(0))
 
-			Expect(bosh.Run(fmt.Sprintf("-d %s restart -n", deploymentNameRDP))).To(Succeed())
-
 			Expect(bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameRDP, manifestPathNoRDP))).To(Succeed())
 
 			disabledSession := doSSHLogin(instanceIP)
