@@ -19,18 +19,19 @@ foreach ($rule in $expectedRules) {
 # Service
 
 $rdp=(Get-Service 'TermService')
+$startMode = (Get-WmiObject -Class Win32_Service -Property StartMode -Filter "Name='TermService'").StartMode
 if ($IsEnabled) {
     if ($rdp.Status -ne 'Running') {
         $Errors += "Expected TermService to be 'Running' got: $($rdp.Status)"
     }
-    if ($rdp.StartType -eq 'Disabled') {
+    if ($startMode -eq 'Disabled') {
         $Errors += "Expected TermService to not be disabled"
     }
 } else {
     if ($rdp.Status -ne 'Stopped') {
         $Errors += "Expected TermService to be 'Stopped' got: $($rdp.Status)"
     }
-    if ($rdp.StartType -ne 'Disabled') {
+    if ($startMode -ne 'Disabled') {
         $Errors += "Expected TermService to be disabled got: $($rdp.StartType)"
     }
 }

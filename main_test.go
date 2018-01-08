@@ -203,7 +203,7 @@ var _ = Describe("Windows Utilities Release", func() {
 			manifestPathRDP, err = config.generateManifestRDP(deploymentNameRDP, instanceName, true, username, password)
 			Expect(err).NotTo(HaveOccurred())
 
-			manifestPathNoRDP, err = config.generateManifestRDP(deploymentNameRDP, instanceName, true, username, password)
+			manifestPathNoRDP, err = config.generateManifestRDP(deploymentNameRDP, instanceName, false, username, password)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
