@@ -235,4 +235,8 @@ var _ = Describe("Windows Utilities Release", func() {
 			Eventually(disabledSession.Err).Should(Say(`Could not request local forwarding.`))
 		})
 	})
+
+	FIt("works", func() {
+		Expect(true).To(BeTrue())
+	})
 })
