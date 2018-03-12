@@ -95,15 +95,7 @@ var _ = Describe("Windows Utilities Release", func() {
 
 	AfterSuite(func() {
 		if config.SkipCleanup {
-			return
 		}
-
-		Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", defaultDeploymentName))).To(Succeed())
-		Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameSSH))).To(Succeed())
-		Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameRDP))).To(Succeed())
-		Expect(bosh.Run(fmt.Sprintf("delete-stemcell %s/%s", stemcellInfo.Name, stemcellInfo.Version))).To(Succeed())
-		Expect(bosh.Run(fmt.Sprintf("delete-release wuts-release/%s", releaseVersion))).To(Succeed())
-		Expect(bosh.Run(fmt.Sprintf("delete-release windows-utilities/%s", winUtilRelVersion))).To(Succeed())
 
 		if defaultManifestPath != "" {
 			Expect(os.RemoveAll(defaultManifestPath)).To(Succeed())
@@ -212,7 +204,7 @@ var _ = Describe("Windows Utilities Release", func() {
 			Expect(os.RemoveAll(manifestPathNoRDP)).To(Succeed())
 		})
 
-		It("enables and then disables RDP", func() {
+		FIt("enables and then disables RDP", func() {
 			Expect(bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameRDP, manifestPathRDP))).To(Succeed())
 
 			instanceIP, err := getFirstInstanceIP(deploymentNameRDP, instanceName)
