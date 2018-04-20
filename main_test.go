@@ -68,7 +68,7 @@ var _ = Describe("Windows Utilities Release", func() {
 		var stdoutInfo BoshStemcell
 		Expect(json.Unmarshal(stdout, &stdoutInfo)).To(Succeed())
 		for _, row := range stdoutInfo.Tables[0].Rows {
-			Expect(row.Version).NotTo(ContainSubstring(stemcellInfo.Version))
+			Expect(row.Version).NotTo(MatchRegexp(fmt.Sprintf(`^%s\*?$`, stemcellInfo.Version)))
 		}
 
 		releaseVersion = createAndUploadRelease(filepath.Join("assets", "wuts-release"))
