@@ -81,7 +81,7 @@ if ($(SSH-Enabled) -eq $CheckSshState.Error) {
 }
 
 $ExpectedSshEnabledState = New-CheckSshState $Expected
-for ($i=0; $i -lt 10 -and ($(SSH-Enabled) -eq $CheckSshState.Pending -or $(SSH-Enabled) -ne $ExpectedSshEnabledState); $i++) {
+for ($i=0; $i -lt 20 -and ($(SSH-Enabled) -eq $CheckSshState.Pending -or $(SSH-Enabled) -ne $ExpectedSshEnabledState); $i++) {
   Write-Host "Sleeping..."
   Start-Sleep 5
 }
