@@ -45,6 +45,19 @@ var _ = Describe("Windows Utilities Release", func() {
 
 		boshCertPath := writeCert(config.Bosh.CaCert)
 		boshGwPrivateKeyPath := writeCert(config.Bosh.GwPrivateKey)
+
+		timeout := BOSH_TIMEOUT
+		if s := os.Getenv("WUTS_BOSH_TIMEOUT"); s != "" {
+			d, err := time.ParseDuration(s)
+			if err != nil {
+				log.Printf("Error parsing BWATS_BOSH_TIMEOUT (%s): %s - falling back to default\n", s, err)
+			} else {
+				log.Printf("Using BWATS_BOSH_TIMEOUT (%s) as timeout\n", s)
+				timeout = d
+			}
+		}
+		log.Printf("Using timeout (%s) for BOSH commands\n", timeout)
+
 		bosh = NewBoshCommand(config, boshCertPath, boshGwPrivateKeyPath, BOSH_TIMEOUT)
 
 		Expect(bosh.Run("login")).To(Succeed())
