@@ -48,6 +48,7 @@ type Config struct {
 		Client       string `json:"client"`
 		ClientSecret string `json:"client_secret"`
 		Target       string `json:"target"`
+		SSHTunnelIP  string `json:"ssh_tunnel_ip"`
 		GwPrivateKey string `json:"gw_private_key"`
 		GwUser       string `json:"gw_user"`
 	} `json:"bosh"`
@@ -243,17 +244,17 @@ func (c *BoshCommand) RunInStdOut(command, dir string) ([]byte, error) {
 	return stdout, nil
 }
 
-func doSSHLogin(targetIP string) *Session {
+func (config *Config) doSSHLogin(targetIP string) *Session {
 	sshLoginDone := make(chan bool, 1)
 	var session *Session
 
 	go func() {
 		defer GinkgoRecover()
 
-		directorAddress := strings.Split(bosh.DirectorIP, ":")[0]
+		sshTunnelAddress := strings.Split(config.Bosh.SSHTunnelIP, ":")[0]
 
 		var err error
-		session, err = runCommand("ssh", "-nNT", fmt.Sprintf("%s@%s", bosh.GwUser, directorAddress), "-i", bosh.GwPrivateKeyPath, "-L", fmt.Sprintf("3389:%s:3389", targetIP), "-o", "StrictHostKeyChecking=no", "-o", "ExitOnForwardFailure=yes")
+		session, err = runCommand("ssh", "-nNT", fmt.Sprintf("%s@%s", bosh.GwUser, sshTunnelAddress), "-i", bosh.GwPrivateKeyPath, "-L", fmt.Sprintf("3389:%s:3389", targetIP), "-o", "StrictHostKeyChecking=no", "-o", "ExitOnForwardFailure=yes")
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(5 * time.Second)
 
