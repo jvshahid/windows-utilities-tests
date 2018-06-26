@@ -185,14 +185,14 @@ var _ = Describe("Windows Utilities Release", func() {
 			Expect(err).To(Succeed())
 
 			// Try to ssh into windows cell
-			err = bosh.Run(fmt.Sprintf("-d %s ssh --opts=-T --command=exit check-ssh/0 --gw-user %s --gw-host %s --gw-private-key %s", deploymentNameSSH, bosh.GwUser, directorURL.Hostname(), bosh.GwPrivateKeyPath))
+			err = bosh.Run(fmt.Sprintf("-d %s ssh --opts=-T --command=exit check-ssh/0 --gw-host %s", deploymentNameSSH, directorURL.Hostname()))
 			Expect(err).To(Succeed())
 
 			err = bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameSSH, manifestPathNoSSH))
 			Expect(err).To(Succeed())
 
 			// Try to ssh into windows cell
-			err = bosh.Run(fmt.Sprintf("-d %s ssh --opts=-T --command=exit check-ssh/0 --gw-user %s --gw-host %s --gw-private-key %s", deploymentNameSSH, bosh.GwUser, directorURL.Hostname(), bosh.GwPrivateKeyPath))
+			err = bosh.Run(fmt.Sprintf("-d %s ssh --opts=-T --command=exit check-ssh/0 --gw-host %s", deploymentNameSSH, directorURL.Hostname()))
 			Expect(err).NotTo(Succeed())
 		})
 	})
