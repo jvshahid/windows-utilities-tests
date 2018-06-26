@@ -28,6 +28,7 @@ instance_groups:
   lifecycle: errand
   azs: [{{.AZ}}]
   vm_type: {{.VmType}}
+  vm_extensions: [{{.VmExtensions}}]
   networks:
   - name: {{.Network}}
   jobs:
@@ -50,6 +51,7 @@ instance_groups:
   lifecycle: errand
   azs: [{{.AZ}}]
   vm_type: {{.VmType}}
+  vm_extensions: [{{.VmExtensions}}]
   networks:
   - name: {{.Network}}
   jobs:
@@ -72,6 +74,7 @@ instance_groups:
   lifecycle: errand
   azs: [{{.AZ}}]
   vm_type: {{.VmType}}
+  vm_extensions: [{{.VmExtensions}}]
   networks:
   - name: {{.Network}}
   jobs:
@@ -94,6 +97,7 @@ instance_groups:
   lifecycle: errand
   azs: [{{.AZ}}]
   vm_type: {{.VmType}}
+  vm_extensions: [{{.VmExtensions}}]
   networks:
   - name: {{.Network}}
   jobs:
@@ -135,6 +139,7 @@ instance_groups:
   lifecycle: service # run as service
   azs: [{{.AZ}}]
   vm_type: {{.VmType}}
+  vm_extensions: [{{.VmExtensions}}]
   networks:
   - name: {{.Network}}
   jobs:
@@ -178,6 +183,7 @@ instance_groups:
   lifecycle: service # run as service
   azs: [{{.AZ}}]
   vm_type: {{.VmType}}
+  vm_extensions: [{{.VmExtensions}}]
   networks:
   - name: {{.Network}}
   jobs:
