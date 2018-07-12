@@ -50,15 +50,15 @@ var _ = Describe("Windows Utilities Release", func() {
 		if s := os.Getenv("WUTS_BOSH_TIMEOUT"); s != "" {
 			d, err := time.ParseDuration(s)
 			if err != nil {
-				log.Printf("Error parsing BWATS_BOSH_TIMEOUT (%s): %s - falling back to default\n", s, err)
+				log.Printf("Error parsing WUTS_BOSH_TIMEOUT (%s): %s - falling back to default\n", s, err)
 			} else {
-				log.Printf("Using BWATS_BOSH_TIMEOUT (%s) as timeout\n", s)
+				log.Printf("Using WUTS_BOSH_TIMEOUT (%s) as timeout\n", s)
 				timeout = d
 			}
 		}
 		log.Printf("Using timeout (%s) for BOSH commands\n", timeout)
 
-		bosh = NewBoshCommand(config, boshCertPath, boshGwPrivateKeyPath, BOSH_TIMEOUT)
+		bosh = NewBoshCommand(config, boshCertPath, boshGwPrivateKeyPath, timeout)
 
 		Expect(bosh.Run("login")).To(Succeed())
 		defaultDeploymentName = fmt.Sprintf("windows-utilities-test-%d", time.Now().UTC().Unix())
