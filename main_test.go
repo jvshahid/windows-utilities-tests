@@ -80,9 +80,9 @@ var _ = Describe("Windows Utilities Release", func() {
 		// Ensure stemcell version has not already been uploaded to bosh director
 		var stdoutInfo BoshStemcell
 		Expect(json.Unmarshal(stdout, &stdoutInfo)).To(Succeed())
-		for _, row := range stdoutInfo.Tables[0].Rows {
-			Expect(row.Version).NotTo(MatchRegexp(fmt.Sprintf(`^%s\*?$`, stemcellInfo.Version)))
-		}
+		// for _, row := range stdoutInfo.Tables[0].Rows {
+		// 	Expect(row.Version).NotTo(MatchRegexp(fmt.Sprintf(`^%s\*?$`, stemcellInfo.Version)))
+		// }
 
 		releaseVersion = createAndUploadRelease(filepath.Join("assets", "wuts-release"))
 		winUtilRelVersion = createAndUploadRelease(config.WindowsUtilitiesPath)
@@ -106,22 +106,22 @@ var _ = Describe("Windows Utilities Release", func() {
 		Expect(err).To(Succeed())
 	})
 
-	AfterSuite(func() {
-		if config.SkipCleanup {
-			return
-		}
+	// AfterSuite(func() {
+	// 	if config.SkipCleanup {
+	// 		return
+	// 	}
 
-		Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", defaultDeploymentName))).To(Succeed())
-		Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameSSH))).To(Succeed())
-		Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameRDP))).To(Succeed())
-		Expect(bosh.Run(fmt.Sprintf("delete-stemcell %s/%s", stemcellInfo.Name, stemcellInfo.Version))).To(Succeed())
-		Expect(bosh.Run(fmt.Sprintf("delete-release wuts-release/%s", releaseVersion))).To(Succeed())
-		Expect(bosh.Run(fmt.Sprintf("delete-release windows-utilities/%s", winUtilRelVersion))).To(Succeed())
+	// 	Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", defaultDeploymentName))).To(Succeed())
+	// 	Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameSSH))).To(Succeed())
+	// 	Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameRDP))).To(Succeed())
+	// 	Expect(bosh.Run(fmt.Sprintf("delete-stemcell %s/%s", stemcellInfo.Name, stemcellInfo.Version))).To(Succeed())
+	// 	Expect(bosh.Run(fmt.Sprintf("delete-release wuts-release/%s", releaseVersion))).To(Succeed())
+	// 	Expect(bosh.Run(fmt.Sprintf("delete-release windows-utilities/%s", winUtilRelVersion))).To(Succeed())
 
-		if defaultManifestPath != "" {
-			Expect(os.RemoveAll(defaultManifestPath)).To(Succeed())
-		}
-	})
+	// 	if defaultManifestPath != "" {
+	// 		Expect(os.RemoveAll(defaultManifestPath)).To(Succeed())
+	// 	}
+	// })
 
 	Context("KMS", func() {
 		It("enables KMS with Host and custom Port", func() {

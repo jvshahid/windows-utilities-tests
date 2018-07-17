@@ -192,6 +192,11 @@ instance_groups:
     properties:
       enable_rdp:
         enabled: {{.RDPEnabled}}
+  - name: enable_ssh
+    release: windows-utilities
+    properties:
+      enable_ssh:
+        enabled: true
   - name: set_password
     release: windows-utilities
     properties:
