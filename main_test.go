@@ -197,7 +197,7 @@ var _ = Describe("Windows Utilities Release", func() {
 		})
 	})
 
-	Context("RDP", func() {
+	FContext("RDP", func() {
 		var (
 			username          string
 			password          string
