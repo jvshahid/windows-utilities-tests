@@ -1,6 +1,7 @@
 package wuts_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -17,15 +18,10 @@ import (
 )
 
 var (
-	bosh                  *BoshCommand
-	defaultDeploymentName string
-	deploymentNameSSH     string
-	deploymentNameRDP     string
-	defaultManifestPath   string
-	boshCertPath          string
-	stemcellInfo          ManifestInfo
-	releaseVersion        string
-	winUtilRelVersion     string
+	bosh              *BoshCommand
+	stemcellInfo      ManifestInfo
+	releaseVersion    string
+	winUtilRelVersion string
 )
 
 func init() {
@@ -36,7 +32,7 @@ func init() {
 var _ = Describe("Windows Utilities Release", func() {
 	var config *Config
 
-	BeforeSuite(func() {
+	SynchronizedBeforeSuite(func() []byte {
 		var err error
 		config, err = NewConfig()
 		Expect(err).To(Succeed())
@@ -61,9 +57,6 @@ var _ = Describe("Windows Utilities Release", func() {
 		bosh = NewBoshCommand(config, boshCertPath, boshGwPrivateKeyPath, timeout)
 
 		Expect(bosh.Run("login")).To(Succeed())
-		defaultDeploymentName = fmt.Sprintf("windows-utilities-test-%d", time.Now().UTC().Unix())
-		deploymentNameSSH = fmt.Sprintf("windows-utilities-test-ssh-%d", time.Now().UTC().Unix())
-		deploymentNameRDP = fmt.Sprintf("windows-utilities-test-rdp-%d", time.Now().UTC().Unix())
 
 		matches, err := filepath.Glob(config.StemcellPath)
 		Expect(err).To(Succeed())
@@ -87,10 +80,6 @@ var _ = Describe("Windows Utilities Release", func() {
 		releaseVersion = createAndUploadRelease(filepath.Join("assets", "wuts-release"))
 		winUtilRelVersion = createAndUploadRelease(config.WindowsUtilitiesPath)
 
-		// Generate default manifest
-		defaultManifestPath, err = config.generateDefaultManifest(defaultDeploymentName)
-		Expect(err).To(Succeed())
-
 		// Upload latest stemcell
 		matches, err = filepath.Glob(config.StemcellPath)
 		Expect(err).To(Succeed(),
@@ -102,67 +91,135 @@ var _ = Describe("Windows Utilities Release", func() {
 		if err != nil {
 			// AWS takes a while to distribute the AMI across accounts
 			time.Sleep(2 * time.Minute)
+			err = bosh.Run(fmt.Sprintf("upload-stemcell %s", matches[0]))
 		}
 		Expect(err).To(Succeed())
+		return []byte(fmt.Sprintf("%s#%s", releaseVersion, winUtilRelVersion))
+	}, func(versions []byte) {
+		dividerIndex := bytes.Index(versions, []byte{'#'})
+		releaseVersion = string(versions[:dividerIndex])
+		winUtilRelVersion = string(versions[dividerIndex+1:])
+		var err error
+		config, err = NewConfig()
+		Expect(err).To(Succeed())
+
+		rand.Seed(time.Now().UnixNano())
+
+		boshCertPath := writeCert(config.Bosh.CaCert)
+		boshGwPrivateKeyPath := writeCert(config.Bosh.GwPrivateKey)
+
+		timeout := BOSH_TIMEOUT
+		if s := os.Getenv("WUTS_BOSH_TIMEOUT"); s != "" {
+			d, err := time.ParseDuration(s)
+			if err != nil {
+				log.Printf("Error parsing WUTS_BOSH_TIMEOUT (%s): %s - falling back to default\n", s, err)
+			} else {
+				log.Printf("Using WUTS_BOSH_TIMEOUT (%s) as timeout\n", s)
+				timeout = d
+			}
+		}
+		log.Printf("Using timeout (%s) for BOSH commands\n", timeout)
+
+		matches, err := filepath.Glob(config.StemcellPath)
+		Expect(err).To(Succeed())
+		Expect(matches).To(HaveLen(1))
+
+		stemcellInfo, err = fetchManifestInfo(matches[0], "stemcell.MF")
+		Expect(err).To(Succeed())
+
+		bosh = NewBoshCommand(config, boshCertPath, boshGwPrivateKeyPath, timeout)
 	})
 
-	AfterSuite(func() {
+	SynchronizedAfterSuite(func() {
+	}, func() {
 		if config.SkipCleanup {
 			return
 		}
 
-		Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", defaultDeploymentName))).To(Succeed())
-		Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameSSH))).To(Succeed())
-		Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameRDP))).To(Succeed())
 		Expect(bosh.Run(fmt.Sprintf("delete-stemcell %s/%s", stemcellInfo.Name, stemcellInfo.Version))).To(Succeed())
 		Expect(bosh.Run(fmt.Sprintf("delete-release wuts-release/%s", releaseVersion))).To(Succeed())
 		Expect(bosh.Run(fmt.Sprintf("delete-release windows-utilities/%s", winUtilRelVersion))).To(Succeed())
-
-		if defaultManifestPath != "" {
-			Expect(os.RemoveAll(defaultManifestPath)).To(Succeed())
-		}
 	})
 
 	Context("KMS", func() {
+		var (
+			deploymentNameKMS string
+			manifestPathKMS   string
+		)
+
+		BeforeEach(func() {
+			var err error
+
+			deploymentNameKMS = fmt.Sprintf("windows-utilities-test-kms-%d", time.Now().UTC().UnixNano())
+			manifestPathKMS, err = config.generateDefaultManifest(deploymentNameKMS)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameKMS))).To(Succeed())
+			Expect(os.RemoveAll(manifestPathKMS)).To(Succeed())
+		})
+
 		It("enables KMS with Host and custom Port", func() {
-			err := bosh.Run(fmt.Sprintf("-d %s deploy %s", defaultDeploymentName, defaultManifestPath))
+			err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameKMS, manifestPathKMS))
 			Expect(err).To(Succeed())
-			err = bosh.Run(fmt.Sprintf("-d %s run-errand kms-host-enabled", defaultDeploymentName))
+			err = bosh.Run(fmt.Sprintf("-d %s run-errand kms-host-enabled", deploymentNameKMS))
 			Expect(err).To(Succeed())
 		})
 
 		It("does not enable KMS", func() {
-			err := bosh.Run(fmt.Sprintf("-d %s deploy %s", defaultDeploymentName, defaultManifestPath))
+			err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameKMS, manifestPathKMS))
 			Expect(err).To(Succeed())
-			err = bosh.Run(fmt.Sprintf("-d %s run-errand kms-host-not-enabled", defaultDeploymentName))
+			err = bosh.Run(fmt.Sprintf("-d %s run-errand kms-host-not-enabled", deploymentNameKMS))
 			Expect(err).To(Succeed())
 		})
 
 		It("enables KMS with Host and default Port", func() {
-			err := bosh.Run(fmt.Sprintf("-d %s deploy %s", defaultDeploymentName, defaultManifestPath))
+			err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameKMS, manifestPathKMS))
 			Expect(err).To(Succeed())
-			err = bosh.Run(fmt.Sprintf("-d %s run-errand kms-host-enabled-with-default", defaultDeploymentName))
+			err = bosh.Run(fmt.Sprintf("-d %s run-errand kms-host-enabled-with-default", deploymentNameKMS))
 			Expect(err).To(Succeed())
 		})
 	})
 
 	Context("Set Password", func() {
-		It("sets Administrator password correctly", func() {
-			err := bosh.Run(fmt.Sprintf("-d %s deploy %s", defaultDeploymentName, defaultManifestPath))
+		var (
+			deploymentNamePassword string
+			manifestPathPassword   string
+		)
+
+		BeforeEach(func() {
+			var err error
+
+			deploymentNamePassword = fmt.Sprintf("windows-utilities-test-password-%d", time.Now().UTC().UnixNano())
+			manifestPathPassword, err = config.generateDefaultManifest(deploymentNamePassword)
 			Expect(err).To(Succeed())
-			err = bosh.Run(fmt.Sprintf("-d %s run-errand set-admin-password", defaultDeploymentName))
+		})
+
+		AfterEach(func() {
+			Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNamePassword))).To(Succeed())
+			Expect(os.RemoveAll(manifestPathPassword)).To(Succeed())
+		})
+
+		It("sets Administrator password correctly", func() {
+			err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNamePassword, manifestPathPassword))
+			Expect(err).To(Succeed())
+			err = bosh.Run(fmt.Sprintf("-d %s run-errand set-admin-password", deploymentNamePassword))
 			Expect(err).To(Succeed())
 		})
 	})
 
 	Context("SSH", func() {
 		var (
+			deploymentNameSSH string
 			manifestPathSSH   string
 			manifestPathNoSSH string
 		)
 
 		BeforeEach(func() {
 			var err error
+
+			deploymentNameSSH = fmt.Sprintf("windows-utilities-test-ssh-%d", time.Now().UTC().UnixNano())
 
 			manifestPathSSH, err = config.generateManifestSSH(deploymentNameSSH, true)
 			Expect(err).NotTo(HaveOccurred())
@@ -172,6 +229,7 @@ var _ = Describe("Windows Utilities Release", func() {
 		})
 
 		AfterEach(func() {
+			Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameSSH))).To(Succeed())
 			Expect(os.RemoveAll(manifestPathSSH)).To(Succeed())
 			Expect(os.RemoveAll(manifestPathNoSSH)).To(Succeed())
 		})
@@ -199,6 +257,7 @@ var _ = Describe("Windows Utilities Release", func() {
 
 	Context("RDP", func() {
 		var (
+			deploymentNameRDP string
 			username          string
 			password          string
 			instanceName      string
@@ -213,6 +272,8 @@ var _ = Describe("Windows Utilities Release", func() {
 			username = "Administrator"
 			password = generateSemiRandomWindowsPassword()
 
+			deploymentNameRDP = fmt.Sprintf("windows-utilities-test-rdp-%d", time.Now().UTC().UnixNano())
+
 			manifestPathRDP, err = config.generateManifestRDP(deploymentNameRDP, instanceName, true, username, password)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -221,6 +282,7 @@ var _ = Describe("Windows Utilities Release", func() {
 		})
 
 		AfterEach(func() {
+			Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameRDP))).To(Succeed())
 			Expect(os.RemoveAll(manifestPathRDP)).To(Succeed())
 			Expect(os.RemoveAll(manifestPathNoRDP)).To(Succeed())
 		})

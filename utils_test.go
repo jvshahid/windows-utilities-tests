@@ -297,15 +297,15 @@ func downloadGo() (string, error) {
 }
 
 //noinspection GoUnusedFunction
-func downloadLogs(jobName string, index int) *Buffer {
+func downloadLogs(deploymentName string, jobName string, index int) *Buffer {
 	tempDir, err := ioutil.TempDir("", "")
 	Expect(err).To(Succeed())
 	defer os.RemoveAll(tempDir)
 
-	err = bosh.Run(fmt.Sprintf("-d %s logs %s/%d --dir %s", defaultDeploymentName, jobName, index, tempDir))
+	err = bosh.Run(fmt.Sprintf("-d %s logs %s/%d --dir %s", deploymentName, jobName, index, tempDir))
 	Expect(err).To(Succeed())
 
-	matches, err := filepath.Glob(filepath.Join(tempDir, fmt.Sprintf("%s.%s.%d-*.tgz", defaultDeploymentName, jobName, index)))
+	matches, err := filepath.Glob(filepath.Join(tempDir, fmt.Sprintf("%s.%s.%d-*.tgz", deploymentName, jobName, index)))
 	Expect(err).To(Succeed())
 	Expect(matches).To(HaveLen(1))
 
@@ -379,7 +379,7 @@ func writeCert(cert string) string {
 		_, err = certFile.Write([]byte(cert))
 		Expect(err).To(Succeed())
 
-		boshCertPath, err = filepath.Abs(certFile.Name())
+		boshCertPath, err := filepath.Abs(certFile.Name())
 		Expect(err).To(Succeed())
 		return boshCertPath
 	}
