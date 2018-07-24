@@ -60,6 +60,7 @@ type Config struct {
 	VmExtensions         string `json:"vm_extensions"`
 	Network              string `json:"network"`
 	SkipCleanup          bool   `json:"skip_cleanup"`
+	SkipCleanupOnRDPFail bool   `json:"skip_cleanup_on_rdp_fail"`
 }
 
 func NewConfig() (*Config, error) {

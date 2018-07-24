@@ -283,6 +283,9 @@ var _ = Describe("Windows Utilities Release", func() {
 		})
 
 		AfterEach(func() {
+			if config.SkipCleanupOnRDPFail && CurrentGinkgoTestDescription().Failed {
+				return
+			}
 			Expect(bosh.Run(fmt.Sprintf("-d %s delete-deployment --force", deploymentNameRDP))).To(Succeed())
 			Expect(os.RemoveAll(manifestPathRDP)).To(Succeed())
 			Expect(os.RemoveAll(manifestPathNoRDP)).To(Succeed())
