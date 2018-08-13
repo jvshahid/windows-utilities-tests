@@ -255,7 +255,17 @@ func (config *Config) doSSHLogin(targetIP string) *Session {
 		sshTunnelAddress := strings.Split(config.Bosh.SSHTunnelIP, ":")[0]
 
 		var err error
-		session, err = runCommand("ssh", "-nNT", fmt.Sprintf("%s@%s", bosh.GwUser, sshTunnelAddress), "-i", bosh.GwPrivateKeyPath, "-L", fmt.Sprintf("3389:%s:3389", targetIP), "-o", "StrictHostKeyChecking=no", "-o", "ExitOnForwardFailure=yes")
+		session, err = runCommand("ssh",
+			"-nNT",
+			fmt.Sprintf("%s@%s", bosh.GwUser, sshTunnelAddress),
+			"-i",
+			bosh.GwPrivateKeyPath,
+			"-L",
+			fmt.Sprintf("3389:%s:3389", targetIP),
+			"-o",
+			"StrictHostKeyChecking=no",
+			"-o",
+			"ExitOnForwardFailure=yes")
 		Expect(err).NotTo(HaveOccurred())
 		time.Sleep(5 * time.Second)
 
