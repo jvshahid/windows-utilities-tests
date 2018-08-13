@@ -301,7 +301,7 @@ var _ = Describe("Windows Utilities Release", func() {
 			defer enabledSession.Kill()
 
 			Eventually(func() (*Session, error) {
-				rdpSession, err := runCommand("/bin/bash", "-c", "/usr/local/bin/check-rdp-sec.pl localhost")
+				rdpSession, err := runCommand("/bin/bash", "-c", "/usr/local/bin/rdp-sec-check.pl localhost")
 				Eventually(rdpSession, 30*time.Second).Should(Exit())
 
 				return rdpSession, err
