@@ -301,7 +301,7 @@ var _ = Describe("Windows Utilities Release", func() {
 			defer enabledSession.Kill()
 
 			Eventually(func() (*Session, error) {
-				rdpSession, err := runCommand("/bin/bash", "-c", fmt.Sprintf("xfreerdp /cert-ignore /u:%s /p:'%s' /v:localhost:3389 +auth-only", username, password))
+				rdpSession, err := runCommand("/bin/bash", "-c", "check-rdp-sec.pl localhost")
 				Eventually(rdpSession, 30*time.Second).Should(Exit())
 
 				return rdpSession, err
