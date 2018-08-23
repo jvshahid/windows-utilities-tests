@@ -22,7 +22,7 @@ import (
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gbytes"
 	. "github.com/onsi/gomega/gexec"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 const BOSH_TIMEOUT = 90 * time.Minute
@@ -332,14 +332,6 @@ type vmInfo struct {
 		Rows []struct {
 			Instance string `json:"instance"`
 			IPs      string `json:"ips"`
-		} `json:"Rows"`
-	} `json:"Tables"`
-}
-
-type BoshStemcell struct {
-	Tables []struct {
-		Rows []struct {
-			Version string `json:"version"`
 		} `json:"Rows"`
 	} `json:"Tables"`
 }
