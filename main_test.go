@@ -296,7 +296,7 @@ var _ = Describe("Windows Utilities Release", func() {
 			Expect(bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameRDP, manifestPathNoRDP))).To(Succeed())
 
 			disabledSession := config.doSSHLogin(instanceIP)
-			Eventually(disabledSession, 30 * time.Second).Should(Exit())
+			Eventually(disabledSession, 60*time.Second).Should(Exit())
 			Eventually(disabledSession.Err).Should(Say(`Could not request local forwarding.`))
 		})
 	})
