@@ -246,33 +246,20 @@ func (c *BoshCommand) RunInStdOut(command, dir string) ([]byte, error) {
 }
 
 func (config *Config) doSSHLogin(targetIP string) *Session {
-	sshLoginDone := make(chan bool, 1)
-	var session *Session
+	sshTunnelAddress := strings.Split(config.Bosh.SSHTunnelIP, ":")[0]
 
-	go func() {
-		defer GinkgoRecover()
-
-		sshTunnelAddress := strings.Split(config.Bosh.SSHTunnelIP, ":")[0]
-
-		var err error
-		session, err = runCommand("ssh",
-			"-nNT",
-			fmt.Sprintf("%s@%s", bosh.GwUser, sshTunnelAddress),
-			"-i",
-			bosh.GwPrivateKeyPath,
-			"-L",
-			fmt.Sprintf("3389:%s:3389", targetIP),
-			"-o",
-			"StrictHostKeyChecking=no",
-			"-o",
-			"ExitOnForwardFailure=yes")
-		Expect(err).NotTo(HaveOccurred())
-		time.Sleep(5 * time.Second)
-
-		sshLoginDone <- true
-	}()
-
-	<-sshLoginDone
+	session, err := runCommand("ssh",
+		"-nNT",
+		fmt.Sprintf("%s@%s", bosh.GwUser, sshTunnelAddress),
+		"-i",
+		bosh.GwPrivateKeyPath,
+		"-L",
+		fmt.Sprintf("3389:%s:3389", targetIP),
+		"-o",
+		"StrictHostKeyChecking=no",
+		"-o",
+		"ExitOnForwardFailure=yes")
+	Expect(err).NotTo(HaveOccurred())
 
 	return session
 }
