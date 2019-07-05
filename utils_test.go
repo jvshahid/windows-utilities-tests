@@ -163,6 +163,20 @@ func (c *Config) generateManifestRDP(deploymentName string, instanceName string,
 	return c.generateManifestFile(manifestProperties, RDPTemplate)
 }
 
+type DefenderManifestProperties struct {
+	ManifestProperties
+	DefenderEnabled bool
+}
+
+func (c *Config) generateManifestWindowsDefender(deploymentName string, enabled bool) (string, error) {
+	manifestProperties := DefenderManifestProperties{
+		ManifestProperties: c.newManifestProperties(deploymentName),
+		DefenderEnabled:    enabled,
+	}
+
+	return c.generateManifestFile(manifestProperties, DefenderTemplate)
+}
+
 type BoshCommand struct {
 	DirectorIP       string
 	Client           string
