@@ -333,6 +333,10 @@ var _ = Describe("Windows Utilities Release", func() {
 		})
 
 		It("enables and disables the appropriate features in Windows Defender", func() {
+			if config.StemcellOS == "windows2012R2" {
+				Skip("Windows Defender is not enabled in Windows 2012R2")
+			}
+
 			var err error
 
 			manifestPathDefenderEnabled, err = config.generateManifestWindowsDefender(
@@ -369,6 +373,10 @@ var _ = Describe("Windows Utilities Release", func() {
 		})
 
 		It("disables Windows Defender features when the enable_windowsdefender job is removed", func() {
+			if config.StemcellOS == "windows2012R2" {
+				Skip("Windows Defender is not enabled in Windows 2012R2")
+			}
+
 			var err error
 
 			manifestPathDefenderEnabled, err = config.generateManifestWindowsDefender(
@@ -399,6 +407,25 @@ var _ = Describe("Windows Utilities Release", func() {
 				fmt.Sprintf("-d %s run-errand check_windowsdefender", deploymentNameDefender),
 			)
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("fails to enable windows defender features when the stemcell doesn't include defender", func() {
+			if config.StemcellOS != "windows2012R2" {
+				Skip("Stemcells with Defender enabled aren't expected to fail to enable features")
+			}
+
+			var err error
+
+			manifestPathDefenderEnabled, err = config.generateManifestWindowsDefender(
+				deploymentNameDefender,
+				true,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = bosh.Run(
+				fmt.Sprintf("-d %s deploy %s", deploymentNameDefender, manifestPathDefenderEnabled),
+			)
+			Expect(err).To(HaveOccurred())
 		})
 	})
 })
