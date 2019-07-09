@@ -249,3 +249,40 @@ instance_groups:
       check_windowsdefender:
         expected: {{.DefenderEnabled}}
 `
+
+const DefenderNotPresentTemplate = `
+---
+name: {{.DeploymentName}}
+
+releases:
+- name: {{.ReleaseName}}
+  version: '{{.WutsVersion}}'
+
+stemcells:
+- alias: windows
+  os: {{.StemcellOS}}
+  version: '{{.StemcellVersion}}'
+
+update:
+  canaries: 0
+  canary_watch_time: 60000
+  update_watch_time: 60000
+  max_in_flight: 2
+
+instance_groups:
+- name: check-windowsdefender
+  instances: 1
+  stemcell: windows
+  lifecycle: service # run as service
+  azs: [{{.AZ}}]
+  vm_type: {{.VmType}}
+  vm_extensions: [{{.VmExtensions}}]
+  networks:
+  - name: {{.Network}}
+  jobs:
+  - name: check_windowsdefender
+    release: {{.ReleaseName}}
+    properties:
+      check_windowsdefender:
+        expected: false
+`

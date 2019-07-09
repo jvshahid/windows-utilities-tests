@@ -302,10 +302,16 @@ var _ = Describe("Windows Utilities Release", func() {
 
 	Context("Windows Defender", func() {
 		var (
-			deploymentNameDefender       string
-			manifestPathDefenderEnabled  string
-			manifestPathDefenderDisabled string
+			deploymentNameDefender         string
+			manifestPathDefenderEnabled    string
+			manifestPathDefenderDisabled   string
+			manifestPathDefenderNotPresent string
 		)
+
+		BeforeEach(func() {
+			id := fmt.Sprintf("%s", uuid.New())[0:8]
+			deploymentNameDefender = fmt.Sprintf("windows-utilities-test-defender-%s", id)
+		})
 
 		AfterEach(func() {
 			if deploymentNameDefender != "" {
@@ -320,12 +326,13 @@ var _ = Describe("Windows Utilities Release", func() {
 				err := os.RemoveAll(manifestPathDefenderDisabled)
 				Expect(err).NotTo(HaveOccurred())
 			}
+			if manifestPathDefenderNotPresent != "" {
+				err := os.RemoveAll(manifestPathDefenderNotPresent)
+				Expect(err).NotTo(HaveOccurred())
+			}
 		})
 
 		It("enables and disables the appropriate features in Windows Defender", func() {
-			id := fmt.Sprintf("%s", uuid.New())[0:8]
-			deploymentNameDefender = fmt.Sprintf("windows-utilities-test-defender-%s", id)
-
 			var err error
 
 			manifestPathDefenderEnabled, err = config.generateManifestWindowsDefender(
@@ -352,6 +359,39 @@ var _ = Describe("Windows Utilities Release", func() {
 
 			err = bosh.Run(
 				fmt.Sprintf("-d %s deploy %s", deploymentNameDefender, manifestPathDefenderDisabled),
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = bosh.Run(
+				fmt.Sprintf("-d %s run-errand check_windowsdefender", deploymentNameDefender),
+			)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("disables Windows Defender features when the enable_windowsdefender job is removed", func() {
+			var err error
+
+			manifestPathDefenderEnabled, err = config.generateManifestWindowsDefender(
+				deploymentNameDefender,
+				true,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = bosh.Run(
+				fmt.Sprintf("-d %s deploy %s", deploymentNameDefender, manifestPathDefenderEnabled),
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = bosh.Run(
+				fmt.Sprintf("-d %s run-errand check_windowsdefender", deploymentNameDefender),
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			manifestPathDefenderNotPresent, err = config.generateManifestWindowsDefenderChecker(deploymentNameDefender)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = bosh.Run(
+				fmt.Sprintf("-d %s deploy %s", deploymentNameDefender, manifestPathDefenderNotPresent),
 			)
 			Expect(err).NotTo(HaveOccurred())
 

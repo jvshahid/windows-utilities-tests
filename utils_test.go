@@ -177,6 +177,12 @@ func (c *Config) generateManifestWindowsDefender(deploymentName string, enabled 
 	return c.generateManifestFile(manifestProperties, DefenderTemplate)
 }
 
+func (c *Config) generateManifestWindowsDefenderChecker(deploymentName string) (string, error) {
+	manifestProperties := DefenderManifestProperties{ManifestProperties: c.newManifestProperties(deploymentName)}
+
+	return c.generateManifestFile(manifestProperties, DefenderNotPresentTemplate)
+}
+
 type BoshCommand struct {
 	DirectorIP       string
 	Client           string
