@@ -27,3 +27,6 @@ You can create a `config.json` file, eg:
 ```
 
 And then run these tests with `CONFIG_JSON=<path-to-config.json> ginkgo`.
+
+Jobs should be developed in a test driven manner.  Writing tests for our test jobs is important because the feedback loop of running unit tests locally is much faster than the feedback loop we get from running the integration tests on a remote vm.  Jobs with unit tests can be tested by running `Invoke-Pester` in a job's directory on a windows machine.
+For example:  running `Invoke-Pester` in `windows-utilities-tests/assets/wuts-release/jobs/check_windowsdefender/templates/modules` runs the tests in `CheckWindowsDefender.Tests.ps1`
