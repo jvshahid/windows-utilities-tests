@@ -266,6 +266,10 @@ func (c *BoshCommand) RunInStdOut(command, dir string) ([]byte, error) {
 }
 
 func (config *Config) doSSHLogin(targetIP string) *Session {
+	if config.Bosh.SSHTunnelIP != "" {
+		return nil
+	}
+
 	sshTunnelAddress := strings.Split(config.Bosh.SSHTunnelIP, ":")[0]
 
 	session, err := runCommand("ssh",

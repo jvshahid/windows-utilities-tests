@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -223,22 +222,18 @@ var _ = Describe("Windows Utilities Release", func() {
 		})
 
 		It("enables and then disables SSH", func() {
-			directorURL, err := url.Parse(fmt.Sprintf("http://%s", bosh.DirectorIP))
-
-			Expect(err).NotTo(HaveOccurred())
-
-			err = bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameSSH, manifestPathSSH))
+			err := bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameSSH, manifestPathSSH))
 			Expect(err).To(Succeed())
 
 			// Try to ssh into windows cell
-			err = bosh.Run(fmt.Sprintf("-d %s ssh --opts=-T --command=exit check-ssh/0 --gw-user %s --gw-host %s --gw-private-key %s", deploymentNameSSH, bosh.GwUser, directorURL.Hostname(), bosh.GwPrivateKeyPath))
+			err = bosh.Run(fmt.Sprintf("-d %s ssh --opts=-T --command=exit check-ssh/0", deploymentNameSSH))
 			Expect(err).To(Succeed())
 
 			err = bosh.Run(fmt.Sprintf("-d %s deploy %s", deploymentNameSSH, manifestPathNoSSH))
 			Expect(err).To(Succeed())
 
 			// Try to ssh into windows cell
-			err = bosh.Run(fmt.Sprintf("-d %s ssh --opts=-T --command=exit check-ssh/0 --gw-user %s --gw-host %s --gw-private-key %s", deploymentNameSSH, bosh.GwUser, directorURL.Hostname(), bosh.GwPrivateKeyPath))
+			err = bosh.Run(fmt.Sprintf("-d %s ssh --opts=-T --command=exit check-ssh/0", deploymentNameSSH))
 			Expect(err).NotTo(Succeed())
 		})
 	})
@@ -286,7 +281,9 @@ var _ = Describe("Windows Utilities Release", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			enabledSession := config.doSSHLogin(instanceIP)
-			defer enabledSession.Kill()
+			if enabledSession != nil {
+				defer enabledSession.Kill()
+			}
 
 			Eventually(func() (*Session, error) {
 				rdpSession, err := runCommand("/bin/bash", "-c", "/usr/local/bin/rdp-sec-check.pl localhost")
